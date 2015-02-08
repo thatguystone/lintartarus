@@ -2,6 +2,7 @@ SRC = src
 
 PKGS = x11 libusb-1.0 >= 1.0.19
 
+BIN = lintartarus
 OBJECTS = \
 	$(SRC)/lintartarus.o \
 	$(SRC)/usb.o \
@@ -39,13 +40,14 @@ export LDFLAGS = \
 	-rdynamic \
 	`pkg-config --libs '$(PKGS)'`
 
-all: lintartarus
+all: $(BIN)
 
 clean:
+	rm -f $(BIN)
 	rm -f $(OBJECTS)
 	rm -f $(OBJECTS:.o=.d)
 
-lintartarus: $(OBJECTS)
+$(BIN): $(OBJECTS)
 	@echo LD $@
 	@$(CC) $^ -o $@ $(LDFLAGS)
 
