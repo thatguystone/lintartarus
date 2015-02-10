@@ -4,8 +4,11 @@ PKGS = x11 libusb-1.0 >= 1.0.19
 
 BIN = lintartarus
 OBJECTS = \
+	$(SRC)/const.o \
 	$(SRC)/lintartarus.o \
+	$(SRC)/poll.o \
 	$(SRC)/usb.o \
+	$(SRC)/usb_dump.o \
 	$(SRC)/x.o
 
 export CFLAGS = \

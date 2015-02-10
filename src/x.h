@@ -16,4 +16,19 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-int x(void);
+#pragma once
+
+/**
+ * Get X ready to run
+ */
+void x_init(void);
+
+/**
+ * The X socket has information pending, handle it
+ */
+int x_poll(void);
+
+/**
+ * Get the X socket in use
+ */
+int x_get_fd(void);

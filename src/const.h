@@ -16,6 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#pragma once
 #include <stdint.h>
 
 /**
@@ -68,6 +69,11 @@ struct layout_val {
 #define CMD_LEN 90
 
 /**
+ * Maximum number of commands that can be sent
+ */
+#define CMDS_MAX 5
+
+/**
  * Where to place the first argument in command arrays
  */
 #define ARG1I 10
@@ -80,192 +86,31 @@ struct layout_val {
 /**
  * Command to set the light level
  */
-const char *light_level_cmd =
-	"\x00\xff\x00\x00\x00\x03\x03\x03\x01\x05\x00\x00\x00\x00\x00\x00\x00\x00"
-	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
+const char *light_level_cmd;
 
 /**
  * Command to change pulsate flag
  */
-const char *pulsate_cmd =
-	"\x00\xff\x00\x00\x00\x03\x03\x02\x01\x05\x00\x00\x00\x00\x00\x00\x00\x00"
-	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
+const char *pulsate_cmd;
 
 /**
  * Commands to change the layout lights
  */
-const char *layout_cmds[] = {
-	"\x00\xff\x00\x00\x00\x03\x03\x00\x01\x0c\x00\x00\x00\x00\x00\x00\x00\x00"
-		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
-	"\x00\xff\x00\x00\x00\x03\x03\x00\x01\x0d\x00\x00\x00\x00\x00\x00\x00\x00"
-		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
-	"\x00\xff\x00\x00\x00\x03\x03\x00\x01\x0e\x00\x00\x00\x00\x00\x00\x00\x00"
-		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
-};
+const char *layout_cmds[3];
 
 /**
  * Values to set in a light-level request
  */
-const struct light_val light_levels[] = {
-	// off
-	{	.a = 0x00,
-		.b = 0x07
-	},
-
-	// low
-	{	.a = 0x49,
-		.b = 0x4e
-	},
-
-	// medium
-	{	.a = 0xa3,
-		.b = 0xa4
-	},
-
-	// high
-	{	.a = 0xff,
-		.b = 0xf8
-	},
-};
+const struct light_val light_levels[4];
 
 /**
  * Values to set in a pulsate request
  */
-const struct light_val pulsate_vals[] = {
-	// solid / off
-	{	.a = 0x00,
-		.b = 0x06
-	},
-
-	// pulsate / on
-	{	.a = 0x02,
-		.b = 0x04
-	},
-};
+const struct light_val pulsate_vals[2];
 
 /**
  * Values to set for changing the layout lights. These appear to be bitmasks
  * (spread across 6 bytes each), but they're defined in a different order.
  * This order is consistent with the windows util.
  */
-const struct layout_val layout_vals[] = {
-	{	.a = {
-			.a = 0x00,
-			.b = 0x0d
-		},
-		.b = {
-			.a = 0x00,
-			.b = 0x0c,
-		},
-		.c = {
-			.a = 0x01,
-			.b = 0x0e
-		},
-	},
-	{	.a = {
-			.a = 0x01,
-			.b = 0x0c
-		},
-		.b = {
-			.a = 0x00,
-			.b = 0x0c,
-		},
-		.c = {
-			.a = 0x00,
-			.b = 0x0f
-		},
-	},
-	{	.a = {
-			.a = 0x00,
-			.b = 0x0d
-		},
-		.b = {
-			.a = 0x01,
-			.b = 0x0d,
-		},
-		.c = {
-			.a = 0x00,
-			.b = 0x0f
-		},
-	},
-	{	.a = {
-			.a = 0x01,
-			.b = 0x0c
-		},
-		.b = {
-			.a = 0x00,
-			.b = 0x0c,
-		},
-		.c = {
-			.a = 0x01,
-			.b = 0x0e
-		},
-	},
-	{	.a = {
-			.a = 0x00,
-			.b = 0x0d
-		},
-		.b = {
-			.a = 0x01,
-			.b = 0x0d,
-		},
-		.c = {
-			.a = 0x01,
-			.b = 0x0e
-		},
-	},
-	{	.a = {
-			.a = 0x01,
-			.b = 0x0c
-		},
-		.b = {
-			.a = 0x01,
-			.b = 0x0d,
-		},
-		.c = {
-			.a = 0x00,
-			.b = 0x0f
-		},
-	},
-	{	.a = {
-			.a = 0x01,
-			.b = 0x0c
-		},
-		.b = {
-			.a = 0x01,
-			.b = 0x0d,
-		},
-		.c = {
-			.a = 0x01,
-			.b = 0x0e
-		},
-	},
-	{	.a = {
-			.a = 0x00,
-			.b = 0x0d
-		},
-		.b = {
-			.a = 0x00,
-			.b = 0x0c,
-		},
-		.c = {
-			.a = 0x00,
-			.b = 0x0f
-		},
-	},
-};
+const struct layout_val layout_vals[8];

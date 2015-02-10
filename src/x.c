@@ -21,29 +21,39 @@
 #include <X11/Xutil.h>
 #include "x.h"
 
-int x()
+static Window _root;
+static Display *_display;
+
+void x_init()
+{
+	_display = XOpenDisplay(0);
+	_root = DefaultRootWindow(_display);
+}
+
+int x_poll()
 {
 	XEvent ev;
-	Display* dpy = XOpenDisplay(0);
-	Window root = DefaultRootWindow(dpy);
+
 
 	unsigned int modifiers = ControlMask | ShiftMask;
-	int keycode = XKeysymToKeycode(dpy,XK_K);
-	Window grab_window =  root;
+	int keycode = XKeysymToKeycode(_display, XK_K);
+	Window grab_window = _root;
 	int owner_events = 0;
 	int pointer_mode = GrabModeAsync;
 	int keyboard_mode = GrabModeAsync;
 
-	XGrabKey(dpy, keycode, modifiers, grab_window, owner_events, pointer_mode, keyboard_mode);
+	XGrabKey(_display, keycode, modifiers, grab_window, owner_events, pointer_mode, keyboard_mode);
 
-	XSelectInput(dpy, root, KeyPressMask);
+	XSelectInput(_display, _root, KeyPressMask);
 	while (1) {
 		int shouldQuit = 0;
-		XNextEvent(dpy, &ev);
+// #error http://stackoverflow.com/questions/14187135/xlib-keyboard-polling
+
+		XNextEvent(_display, &ev);
 		switch (ev.type) {
 			case KeyPress:
 				printf("Hot key pressed!\n");
-				XUngrabKey(dpy,keycode,modifiers,grab_window);
+				XUngrabKey(_display,keycode,modifiers,grab_window);
 				shouldQuit = 1;
 
 			default:
@@ -55,6 +65,11 @@ int x()
 		}
 	}
 
-	XCloseDisplay(dpy);
+	XCloseDisplay(_display);
 	return 0;
+}
+
+int x_get_fd()
+{
+	return XConnectionNumber(_display);
 }

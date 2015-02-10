@@ -20,149 +20,189 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <string.h>
 #include "const.h"
 #include "usb.h"
+#include "util.h"
 
-static int _inited = 0;
+#define bmREQUEST_OUT \
+	(LIBUSB_ENDPOINT_OUT | \
+		LIBUSB_REQUEST_TYPE_CLASS | \
+		LIBUSB_RECIPIENT_INTERFACE)
 
-__attribute__((__noreturn__))
-__attribute__((__format__(__printf__, 1,2)))
-static void _error(const char *format, ...)
+#define bmREQUEST_IN \
+	(LIBUSB_ENDPOINT_IN | \
+		LIBUSB_REQUEST_TYPE_CLASS | \
+		LIBUSB_RECIPIENT_INTERFACE)
+
+#define TIMEOUT 2000
+
+static int _layout;
+static int _pulse;
+static enum usb_brightness _brightness;
+static libusb_device_handle *_devh;
+
+void usb_init()
 {
-	va_list args;
-	char msg[2304];
+	int err;
 
-	va_start(args, format);
-	vsnprintf(msg, sizeof(msg), format, args);
-
-	fprintf(stderr, "%s\n", msg);
-	exit(1);
+	err = libusb_init(NULL);
+	if (err < 0) {
+		usb_perror(err, "failed to init libusb");
+		exit(2);
+	}
 }
 
-__attribute__((__noreturn__))
-__attribute__((__format__(__printf__, 2, 3)))
-static void _perror(int err, const char *format, ...)
+void usb_set_brightness(enum usb_brightness brightness)
+{
+	_brightness = brightness;
+}
+
+void usb_set_pulse(int pulse)
+{
+	_pulse = pulse;
+}
+
+int usb_connected()
+{
+	return _devh != NULL;
+}
+
+void usb_poll(void)
+{
+	if (usb_connected()) {
+		return;
+	}
+
+ 	_devh = libusb_open_device_with_vid_pid(NULL, VENDOR, PRODUCT);
+ 	if (_devh == NULL) {
+ 		// Still not connected...
+ 		return;
+ 	}
+
+ 	// Cool, the device connected! Sync settings to it
+ 	usb_commit();
+}
+
+static void _build_cmds(unsigned char cmdv[CMDS_MAX][CMD_LEN])
+{
+	int i;
+
+	for (i = 0; i < 3; i++) {
+		memcpy(cmdv[i], layout_cmds[i], CMD_LEN);
+	}
+
+	memcpy(cmdv[3], pulsate_cmd, CMD_LEN);
+	memcpy(cmdv[4], light_level_cmd, CMD_LEN);
+
+	cmdv[0][ARG1I] = layout_vals[_layout].a.a;
+	cmdv[0][ARG2I] = layout_vals[_layout].a.b;
+	cmdv[1][ARG1I] = layout_vals[_layout].b.a;
+	cmdv[1][ARG2I] = layout_vals[_layout].b.b;
+	cmdv[2][ARG1I] = layout_vals[_layout].c.a;
+	cmdv[2][ARG2I] = layout_vals[_layout].c.b;
+
+	cmdv[3][ARG1I] = pulsate_vals[_pulse].a;
+	cmdv[3][ARG2I] = pulsate_vals[_pulse].b;
+
+	cmdv[4][ARG1I] = light_levels[_brightness].a;
+	cmdv[4][ARG2I] = light_levels[_brightness].b;
+}
+
+void usb_commit()
+{
+	int i;
+	int err;
+	struct libusb_config_descriptor *cfg;
+	unsigned char cmdv[CMDS_MAX][CMD_LEN];
+	int ok = 0;
+
+	err = libusb_get_config_descriptor(libusb_get_device(_devh), 0, &cfg);
+	if (err != LIBUSB_SUCCESS) {
+		usb_perror(err, "failed to fetch device config");
+		goto out;
+	}
+
+	for (i = 0; i < cfg->bNumInterfaces; i++) {
+		int iface = cfg->interface[i].altsetting->bInterfaceNumber;
+		if (!libusb_kernel_driver_active(_devh, iface)) {
+			continue;
+		}
+
+		err = libusb_detach_kernel_driver(_devh, iface);
+		if (err != LIBUSB_SUCCESS) {
+			usb_perror(err, "failed to detach kernel driver");
+			goto out;
+		}
+	}
+
+	err = libusb_set_configuration(_devh, cfg->bConfigurationValue);
+	if (err != LIBUSB_SUCCESS) {
+		usb_perror(err, "failed to set device configuration");
+		goto out;
+	}
+
+	err = libusb_claim_interface(_devh, wINDEX);
+	if (err != LIBUSB_SUCCESS) {
+		usb_perror(err, "failed to claim interface %d", wINDEX);
+		goto out;
+	}
+
+	_build_cmds(cmdv);
+	for (i = 0; i < CMDS_MAX; i++) {
+		err = libusb_control_transfer(_devh,
+			bmREQUEST_OUT,
+			LIBUSB_REQUEST_SET_CONFIGURATION,
+			wVALUE,
+			wINDEX,
+			cmdv[i], CMD_LEN,
+			TIMEOUT);
+		if (err < LIBUSB_SUCCESS) {
+			usb_perror(err, "out control transfer failed %d", err);
+			goto out;
+		}
+
+		// I'm not sure this is necessary, but the Windows util does it for
+		// some reason
+		err = libusb_control_transfer(_devh,
+			bmREQUEST_IN,
+			LIBUSB_REQUEST_CLEAR_FEATURE,
+			wVALUE,
+			wINDEX,
+			cmdv[i], CMD_LEN,
+			TIMEOUT);
+		if (err < LIBUSB_SUCCESS) {
+			usb_perror(err, "in control transfer failed");
+			goto out;
+		}
+	}
+
+	ok = 1;
+
+out:
+	libusb_release_interface(_devh, wINDEX);
+
+	for (i = 0; i < cfg->bNumInterfaces; i++) {
+		libusb_attach_kernel_driver(_devh,
+			cfg->interface[i].altsetting->bInterfaceNumber);
+	}
+
+	libusb_free_config_descriptor(cfg);
+
+	if (!ok) {
+		libusb_close(_devh);
+		_devh = NULL;
+	}
+}
+
+void usb_perror(int err, const char *format, ...)
 {
 	va_list args;
 	char msg[2048];
 
 	va_start(args, format);
 	vsnprintf(msg, sizeof(msg), format, args);
-	_error("%s: %s", msg, libusb_strerror(err));
-}
+	va_end(args);
 
-static void _init(void)
-{
-	int err;
-
-	if (_inited) {
-		return;
-	}
-
-	err = libusb_init(NULL);
-	if (err < 0) {
-		_perror(err, "failed to init libusb");
-	}
-
-	_inited = 1;
-}
-
-static libusb_device_handle* _get_devh(void)
-{
-	libusb_device_handle *devh;
-
-	_init();
-
-	devh = libusb_open_device_with_vid_pid(NULL, VENDOR, PRODUCT);
-	if (devh == NULL) {
-		_error("device not found; do you have permission?");
-	}
-
-	return devh;
-}
-
-static void _free_devh(libusb_device_handle *dev)
-{
-	libusb_close(dev);
-	libusb_exit(NULL);
-	_inited = 0;
-}
-
-static const char* _desc_type(int bDescriptorType)
-{
-	switch (bDescriptorType) {
-		case LIBUSB_DT_DEVICE: return "device";
-		case LIBUSB_DT_CONFIG: return "config";
-		case LIBUSB_DT_STRING: return "string";
-		case LIBUSB_DT_INTERFACE: return "interface";
-		case LIBUSB_DT_ENDPOINT: return "endpoint";
-		case LIBUSB_DT_BOS: return "bos";
-		case LIBUSB_DT_DEVICE_CAPABILITY: return "device_capability";
-		case LIBUSB_DT_HID: return "hid";
-		case LIBUSB_DT_REPORT: return "report";
-		case LIBUSB_DT_PHYSICAL: return "physical";
-		case LIBUSB_DT_HUB: return "hub";
-		case LIBUSB_DT_SUPERSPEED_HUB: return "superspeed_hub";
-		case LIBUSB_DT_SS_ENDPOINT_COMPANION: return "ss_endpoint_companion";
-		default: return "unknown";
-	}
-}
-
-static const char* _ep_type(int bmAttributes)
-{
-	switch (bmAttributes & USB_EP_TYPE_MASK) {
-		case LIBUSB_TRANSFER_TYPE_CONTROL: return "control";
-		case LIBUSB_TRANSFER_TYPE_ISOCHRONOUS: return "isochronous";
-		case LIBUSB_TRANSFER_TYPE_BULK: return "bulk";
-		case LIBUSB_TRANSFER_TYPE_INTERRUPT: return "interrupt";
-		case LIBUSB_TRANSFER_TYPE_BULK_STREAM: return "stream";
-		default: return "unknown";
-	}
-}
-
-void usb_dump()
-{
-	int i;
-	int j;
-	int k;
-	int err;
-	struct libusb_config_descriptor *cfg;
-	libusb_device_handle *devh = _get_devh();
-	libusb_device *dev = libusb_get_device(devh);
-
-	err = libusb_get_config_descriptor(dev, 0, &cfg);
-	if (err < 0) {
-		_perror(err, "failed to get device config");
-	}
-
-	printf("#interfaces = %d\n", cfg->bNumInterfaces);
-
-	for (i = 0; i < cfg->bNumInterfaces; i++) {
-		const struct libusb_interface *iface = &cfg->interface[i];
-		printf("%d - altsettings = %d\n", i, iface->num_altsetting);
-
-		for (j = 0; j < iface->num_altsetting; j++) {
-			const struct libusb_interface_descriptor *id = &iface->altsetting[j];
-
-			printf("\t\tdesctype   = %s\n", _desc_type(id->bDescriptorType));
-			printf("\t\tclass      = %d\n", id->bInterfaceClass);
-			printf("\t\tstr idx    = %d\n", id->iInterface);
-			printf("\t\t#endpoints = %d\n", id->bNumEndpoints);
-
-			for (k = 0; k < id->bNumEndpoints; k++) {
-				const struct libusb_endpoint_descriptor *ep = &id->endpoint[k];
-
-				printf("\t\t\taddr      = %d\n", ep->bEndpointAddress & USB_EP_ADDR_MASK);
-				printf("\t\t\ttype      = %s\n", _desc_type(ep->bDescriptorType));
-				printf("\t\t\tdirection = %s\n",
-					(ep->bEndpointAddress & USB_EP_DIR_MASK) == LIBUSB_ENDPOINT_IN ? "in" : "out");
-				printf("\t\t\ttype      = %s\n", _ep_type(ep->bmAttributes));
-				printf("\n");
-			}
-		}
-	}
-
-	libusb_free_config_descriptor(cfg);
-	_free_devh(devh);
+	fprintf(stderr, "%s: %s\n", msg, libusb_strerror(err));
 }
