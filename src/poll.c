@@ -16,29 +16,64 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <errno.h>
+#include <glib.h>
 #include <poll.h>
 #include <stdio.h>
+#include <string.h>
+#include <sys/inotify.h>
+#include <unistd.h>
+#include "config.h"
 #include "poll.h"
 #include "usb.h"
 #include "x.h"
 
+/**
+ * Inotify fd for watching for config changes
+ */
+static int _ifd;
+
+void poll_init()
+{
+	int err;
+
+	_ifd = inotify_init1(IN_NONBLOCK);
+	if (_ifd == -1) {
+		g_error("failed to create inotify instance: %s", strerror(errno));
+	}
+
+	err = inotify_add_watch(_ifd, cfg.config_dir, IN_CLOSE_WRITE | IN_MOVED_TO);
+	if (err == -1) {
+		g_error("failed to watch config directory: %s", strerror(errno));
+	}
+}
+
 void poll_run()
 {
 	int err;
-	int timeout = 1000;
+	char buff[1024];
 	struct pollfd fds[] = {
+		{	.fd = _ifd,
+			.events = POLLIN,
+		},
 		{	.fd = x_get_fd(),
 			.events = POLLIN,
 		},
 	};
 
-	usb_poll();
-	if (!usb_connected()) {
-		timeout /= 10;
-	}
-
-	err = poll(fds, sizeof(fds) / sizeof(*fds), timeout);
+	err = poll(fds, G_N_ELEMENTS(fds), -1);
 	if (err == -1) {
 		return;
+	}
+
+	if (fds[0].revents & POLLIN) {
+		// Don't care about what happened, just that something did
+		while (read(_ifd, buff, sizeof(buff)) > 0);
+
+		cfg_reload();
+	}
+
+	if (fds[1].revents & POLLIN) {
+		x_poll();
 	}
 }

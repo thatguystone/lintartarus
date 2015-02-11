@@ -17,7 +17,47 @@
  */
 
 #pragma once
+#include "usb.h"
 
-#define UNUSED __attribute__((__unused__))
-#define NORETURN __attribute__((__noreturn__))
-#define PRINTF(arg1, arg2) __attribute__((__format__(__printf__, arg1, arg2)))
+/**
+ * Default config file when one doesn't exist
+ */
+#define DEFAULT_CONFIG \
+	"[default]\n" \
+	"pulse = false\n" \
+	"brightness = low\n" \
+	"next-layout = ctrl+alt+shift+n\n" \
+	"prev-layout = ctrl+alt+shift+p\n"
+
+/**
+ * Configuration options
+ */
+struct config{
+	char *config_dir;
+	int layout;
+
+	struct {
+		char *next;
+		char *prev;
+	} hotkeys;
+
+	struct {
+		int pulse;
+		enum usb_brightness brightness;
+	} usb;
+};
+
+/**
+ * Global config
+ */
+struct config cfg;
+
+/**
+ * Setup global config
+ */
+void cfg_init(int argc, char **argv);
+
+/**
+ * Reload configuration files
+ */
+void cfg_reload(void);

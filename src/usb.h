@@ -17,7 +17,7 @@
  */
 
 #pragma once
-#include "util.h"
+#include <glib.h>
 
 /**
  * Different backlight levels
@@ -35,35 +35,12 @@ enum usb_brightness {
 void usb_init(void);
 
 /**
- * Set device brightness
- */
-void usb_set_brightness(enum usb_brightness brightness);
-
-/**
- * Set pulse
- *
- * 0 = solid, no pulsing
- * 1 = pulsing
- */
-void usb_set_pulse(int pulse);
-
-/**
- * Return if the device is connected
- */
-int usb_connected(void);
-
-/**
- * Run any necessary USB polling operations
- */
-void usb_poll(void);
-
-/**
  * Sync settings to the device
  */
-void usb_commit(void);
+void usb_sync(void);
 
 /**
  * Print a USB error to stderr
  */
-PRINTF(2, 3)
+G_GNUC_PRINTF(2, 3)
 void usb_perror(int err, const char *format, ...);

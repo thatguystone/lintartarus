@@ -16,14 +16,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <glib.h>
 #include <libusb.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "config.h"
 #include "const.h"
 #include "usb.h"
-#include "util.h"
 
 #define bmREQUEST_OUT \
 	(LIBUSB_ENDPOINT_OUT | \
@@ -37,10 +38,35 @@
 
 #define TIMEOUT 2000
 
-static int _layout;
-static int _pulse;
-static enum usb_brightness _brightness;
+static GRecMutex _lock;
 static libusb_device_handle *_devh;
+
+static int _hotplug(
+	libusb_context *ctx G_GNUC_UNUSED,
+	libusb_device *dev,
+	libusb_hotplug_event event,
+	void *user_data G_GNUC_UNUSED)
+{
+	int err;
+
+	g_rec_mutex_lock(&_lock);
+
+	if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED) {
+		err = libusb_open(dev, &_devh);
+		if (err != 0) {
+			usb_perror(err, "failed to open USB device");
+		} else {
+			usb_sync();
+		}
+	} else {
+		libusb_close(_devh);
+		_devh = NULL;
+	}
+
+	g_rec_mutex_unlock(&_lock);
+
+	return 0;
+}
 
 void usb_init()
 {
@@ -51,37 +77,13 @@ void usb_init()
 		usb_perror(err, "failed to init libusb");
 		exit(2);
 	}
-}
 
-void usb_set_brightness(enum usb_brightness brightness)
-{
-	_brightness = brightness;
-}
-
-void usb_set_pulse(int pulse)
-{
-	_pulse = pulse;
-}
-
-int usb_connected()
-{
-	return _devh != NULL;
-}
-
-void usb_poll(void)
-{
-	if (usb_connected()) {
-		return;
-	}
-
- 	_devh = libusb_open_device_with_vid_pid(NULL, VENDOR, PRODUCT);
- 	if (_devh == NULL) {
- 		// Still not connected...
- 		return;
- 	}
-
- 	// Cool, the device connected! Sync settings to it
- 	usb_commit();
+	libusb_hotplug_register_callback(NULL,
+		LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED | LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT,
+		LIBUSB_HOTPLUG_ENUMERATE,
+		VENDOR, PRODUCT,
+		LIBUSB_HOTPLUG_MATCH_ANY,
+		_hotplug, NULL, NULL);
 }
 
 static void _build_cmds(unsigned char cmdv[CMDS_MAX][CMD_LEN])
@@ -95,36 +97,42 @@ static void _build_cmds(unsigned char cmdv[CMDS_MAX][CMD_LEN])
 	memcpy(cmdv[3], pulsate_cmd, CMD_LEN);
 	memcpy(cmdv[4], light_level_cmd, CMD_LEN);
 
-	cmdv[0][ARG1I] = layout_vals[_layout].a.a;
-	cmdv[0][ARG2I] = layout_vals[_layout].a.b;
-	cmdv[1][ARG1I] = layout_vals[_layout].b.a;
-	cmdv[1][ARG2I] = layout_vals[_layout].b.b;
-	cmdv[2][ARG1I] = layout_vals[_layout].c.a;
-	cmdv[2][ARG2I] = layout_vals[_layout].c.b;
+	cmdv[0][ARG1I] = layout_vals[cfg.layout].a.a;
+	cmdv[0][ARG2I] = layout_vals[cfg.layout].a.b;
+	cmdv[1][ARG1I] = layout_vals[cfg.layout].b.a;
+	cmdv[1][ARG2I] = layout_vals[cfg.layout].b.b;
+	cmdv[2][ARG1I] = layout_vals[cfg.layout].c.a;
+	cmdv[2][ARG2I] = layout_vals[cfg.layout].c.b;
 
-	cmdv[3][ARG1I] = pulsate_vals[_pulse].a;
-	cmdv[3][ARG2I] = pulsate_vals[_pulse].b;
+	cmdv[3][ARG1I] = pulsate_vals[cfg.usb.pulse].a;
+	cmdv[3][ARG2I] = pulsate_vals[cfg.usb.pulse].b;
 
-	cmdv[4][ARG1I] = light_levels[_brightness].a;
-	cmdv[4][ARG2I] = light_levels[_brightness].b;
+	cmdv[4][ARG1I] = light_levels[cfg.usb.brightness].a;
+	cmdv[4][ARG2I] = light_levels[cfg.usb.brightness].b;
 }
 
-void usb_commit()
+void usb_sync()
 {
 	int i;
 	int err;
-	struct libusb_config_descriptor *cfg;
+	struct libusb_config_descriptor *dcfg;
 	unsigned char cmdv[CMDS_MAX][CMD_LEN];
 	int ok = 0;
 
-	err = libusb_get_config_descriptor(libusb_get_device(_devh), 0, &cfg);
+	g_rec_mutex_lock(&_lock);
+
+	if (_devh == NULL) {
+		goto out;
+	}
+
+	err = libusb_get_config_descriptor(libusb_get_device(_devh), 0, &dcfg);
 	if (err != LIBUSB_SUCCESS) {
 		usb_perror(err, "failed to fetch device config");
 		goto out;
 	}
 
-	for (i = 0; i < cfg->bNumInterfaces; i++) {
-		int iface = cfg->interface[i].altsetting->bInterfaceNumber;
+	for (i = 0; i < dcfg->bNumInterfaces; i++) {
+		int iface = dcfg->interface[i].altsetting->bInterfaceNumber;
 		if (!libusb_kernel_driver_active(_devh, iface)) {
 			continue;
 		}
@@ -136,7 +144,7 @@ void usb_commit()
 		}
 	}
 
-	err = libusb_set_configuration(_devh, cfg->bConfigurationValue);
+	err = libusb_set_configuration(_devh, dcfg->bConfigurationValue);
 	if (err != LIBUSB_SUCCESS) {
 		usb_perror(err, "failed to set device configuration");
 		goto out;
@@ -180,29 +188,36 @@ void usb_commit()
 	ok = 1;
 
 out:
-	libusb_release_interface(_devh, wINDEX);
+	if (_devh != NULL) {
+		libusb_release_interface(_devh, wINDEX);
 
-	for (i = 0; i < cfg->bNumInterfaces; i++) {
-		libusb_attach_kernel_driver(_devh,
-			cfg->interface[i].altsetting->bInterfaceNumber);
+		for (i = 0; i < dcfg->bNumInterfaces; i++) {
+			libusb_attach_kernel_driver(_devh,
+				dcfg->interface[i].altsetting->bInterfaceNumber);
+		}
+
+		libusb_free_config_descriptor(dcfg);
+
+		if (!ok) {
+			libusb_close(_devh);
+			_devh = NULL;
+		}
 	}
 
-	libusb_free_config_descriptor(cfg);
-
-	if (!ok) {
-		libusb_close(_devh);
-		_devh = NULL;
-	}
+	g_rec_mutex_unlock(&_lock);
 }
 
 void usb_perror(int err, const char *format, ...)
 {
 	va_list args;
-	char msg[2048];
+	GString *buff = g_string_new("");
 
 	va_start(args, format);
-	vsnprintf(msg, sizeof(msg), format, args);
+	g_string_vprintf(buff, format, args);
 	va_end(args);
 
-	fprintf(stderr, "%s: %s\n", msg, libusb_strerror(err));
+	g_log(NULL, G_LOG_LEVEL_CRITICAL, "%s: %s\n",
+		buff->str,
+		libusb_strerror(err));
+	g_string_free(buff, TRUE);
 }

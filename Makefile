@@ -1,9 +1,10 @@
 SRC = src
 
-PKGS = x11 libusb-1.0 >= 1.0.19
+PKGS = x11 libusb-1.0 >= 1.0.19 glib-2.0 >= 2.32
 
 BIN = lintartarus
 OBJECTS = \
+	$(SRC)/config.o \
 	$(SRC)/const.o \
 	$(SRC)/lintartarus.o \
 	$(SRC)/poll.o \

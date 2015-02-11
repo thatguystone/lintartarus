@@ -24,9 +24,14 @@
 void x_init(void);
 
 /**
+ * Sync key bindings with X
+ */
+void x_sync(void);
+
+/**
  * The X socket has information pending, handle it
  */
-int x_poll(void);
+void x_poll(void);
 
 /**
  * Get the X socket in use

@@ -19,6 +19,11 @@
 #pragma once
 
 /**
+ * Initialize polling
+ */
+void poll_init(void);
+
+/**
  * Poll for any updates
  */
 void poll_run(void);

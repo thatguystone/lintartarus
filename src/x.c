@@ -16,57 +16,106 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <glib.h>
 #include <stdio.h>
+#include <string.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include "config.h"
 #include "x.h"
+
+struct _binding {
+	guint modifiers;
+	int keycode;
+};
 
 static Window _root;
 static Display *_display;
+
+static struct _binding _layout_next;
+static struct _binding _layout_prev;
+
+static void _parse_binding(const char *combo, struct _binding *b)
+{
+	char *k;
+	char **iter;
+	char **parts = g_strsplit(combo, "+", 0);
+
+	memset(b, 0, sizeof(*b));
+
+	iter = parts;
+	while (*iter != NULL) {
+		g_strstrip(*iter);
+		k = g_utf8_strdown(*iter, -1);
+
+		if (g_str_equal(k, "alt")) {
+			b->modifiers |= Mod1Mask;
+		} else if (g_str_equal(k, "super")) {
+			b->modifiers |= Mod4Mask;
+		} else if (g_str_equal(k, "ctrl")) {
+			b->modifiers |= ControlMask;
+		} else if (g_str_equal(k, "shift")) {
+			b->modifiers |= ShiftMask;
+		} else if (strlen(k) == 1) {
+			b->keycode = XKeysymToKeycode(_display, XStringToKeysym(k));
+		} else {
+			g_error("unknown key: %s", k);
+		}
+
+		g_free(k);
+		iter++;
+	}
+
+	g_strfreev(parts);
+}
 
 void x_init()
 {
 	_display = XOpenDisplay(0);
 	_root = DefaultRootWindow(_display);
+	XSelectInput(_display, _root, KeyPressMask);
 }
 
-int x_poll()
+void x_sync()
+{
+	XUngrabKey(_display,
+		_layout_next.keycode, _layout_next.modifiers,
+		_root);
+	XUngrabKey(_display,
+		_layout_prev.keycode, _layout_prev.modifiers,
+		_root);
+
+	_parse_binding(cfg.hotkeys.next, &_layout_next);
+	_parse_binding(cfg.hotkeys.prev, &_layout_prev);
+
+	XGrabKey(_display,
+		_layout_next.keycode, _layout_next.modifiers,
+		_root, 0,
+		GrabModeAsync, GrabModeAsync);
+	XGrabKey(_display,
+		_layout_prev.keycode, _layout_prev.modifiers,
+		_root, 0,
+		GrabModeAsync, GrabModeAsync);
+
+	// For some reason, without this, poll never fires...
+	XPending(_display);
+}
+
+void x_poll()
 {
 	XEvent ev;
 
-
-	unsigned int modifiers = ControlMask | ShiftMask;
-	int keycode = XKeysymToKeycode(_display, XK_K);
-	Window grab_window = _root;
-	int owner_events = 0;
-	int pointer_mode = GrabModeAsync;
-	int keyboard_mode = GrabModeAsync;
-
-	XGrabKey(_display, keycode, modifiers, grab_window, owner_events, pointer_mode, keyboard_mode);
-
-	XSelectInput(_display, _root, KeyPressMask);
-	while (1) {
-		int shouldQuit = 0;
-// #error http://stackoverflow.com/questions/14187135/xlib-keyboard-polling
-
+	while (XPending(_display)) {
 		XNextEvent(_display, &ev);
 		switch (ev.type) {
 			case KeyPress:
 				printf("Hot key pressed!\n");
-				XUngrabKey(_display,keycode,modifiers,grab_window);
-				shouldQuit = 1;
+				break;
 
 			default:
 				break;
 		}
-
-		if (shouldQuit) {
-			break;
-		}
 	}
-
-	XCloseDisplay(_display);
-	return 0;
 }
 
 int x_get_fd()
