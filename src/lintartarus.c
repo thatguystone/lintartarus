@@ -24,9 +24,9 @@
 int main(int argc, char **argv)
 {
 	x_init();
-	usb_init();
 	cfg_init(argc, argv);
 
+	usb_init();
 	poll_init();
 	while (1) {
 		poll_run();

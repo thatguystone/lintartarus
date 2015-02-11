@@ -38,8 +38,32 @@
 
 #define TIMEOUT 2000
 
-static GRecMutex _lock;
 static libusb_device_handle *_devh;
+
+static void _build_cmds(unsigned char cmdv[CMDS_MAX][CMD_LEN])
+{
+	int i;
+
+	for (i = 0; i < 3; i++) {
+		memcpy(cmdv[i], layout_cmds[i], CMD_LEN);
+	}
+
+	memcpy(cmdv[3], pulsate_cmd, CMD_LEN);
+	memcpy(cmdv[4], light_level_cmd, CMD_LEN);
+
+	cmdv[0][ARG1I] = layout_vals[cfg.layout - 1].a.a;
+	cmdv[0][ARG2I] = layout_vals[cfg.layout - 1].a.b;
+	cmdv[1][ARG1I] = layout_vals[cfg.layout - 1].b.a;
+	cmdv[1][ARG2I] = layout_vals[cfg.layout - 1].b.b;
+	cmdv[2][ARG1I] = layout_vals[cfg.layout - 1].c.a;
+	cmdv[2][ARG2I] = layout_vals[cfg.layout - 1].c.b;
+
+	cmdv[3][ARG1I] = pulsate_vals[cfg.usb.pulse].a;
+	cmdv[3][ARG2I] = pulsate_vals[cfg.usb.pulse].b;
+
+	cmdv[4][ARG1I] = light_levels[cfg.usb.brightness].a;
+	cmdv[4][ARG2I] = light_levels[cfg.usb.brightness].b;
+}
 
 static int _hotplug(
 	libusb_context *ctx G_GNUC_UNUSED,
@@ -48,8 +72,6 @@ static int _hotplug(
 	void *user_data G_GNUC_UNUSED)
 {
 	int err;
-
-	g_rec_mutex_lock(&_lock);
 
 	if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED) {
 		err = libusb_open(dev, &_devh);
@@ -62,8 +84,6 @@ static int _hotplug(
 		libusb_close(_devh);
 		_devh = NULL;
 	}
-
-	g_rec_mutex_unlock(&_lock);
 
 	return 0;
 }
@@ -78,6 +98,10 @@ void usb_init()
 		exit(2);
 	}
 
+	if (!libusb_has_capability(LIBUSB_CAP_HAS_HOTPLUG)) {
+		g_error("libusb doesn't support hotplug events");
+	}
+
 	libusb_hotplug_register_callback(NULL,
 		LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED | LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT,
 		LIBUSB_HOTPLUG_ENUMERATE,
@@ -86,29 +110,24 @@ void usb_init()
 		_hotplug, NULL, NULL);
 }
 
-static void _build_cmds(unsigned char cmdv[CMDS_MAX][CMD_LEN])
+const struct libusb_pollfd** usb_get_pollfds(guint *fdsc)
 {
-	int i;
+	const struct libusb_pollfd **fdsi;
+	const struct libusb_pollfd **fds = libusb_get_pollfds(NULL);
 
-	for (i = 0; i < 3; i++) {
-		memcpy(cmdv[i], layout_cmds[i], CMD_LEN);
+	*fdsc = 0;
+	fdsi = fds;
+	while (*fdsi != NULL) {
+		(*fdsc)++;
+		fdsi++;
 	}
 
-	memcpy(cmdv[3], pulsate_cmd, CMD_LEN);
-	memcpy(cmdv[4], light_level_cmd, CMD_LEN);
+	return fds;
+}
 
-	cmdv[0][ARG1I] = layout_vals[cfg.layout].a.a;
-	cmdv[0][ARG2I] = layout_vals[cfg.layout].a.b;
-	cmdv[1][ARG1I] = layout_vals[cfg.layout].b.a;
-	cmdv[1][ARG2I] = layout_vals[cfg.layout].b.b;
-	cmdv[2][ARG1I] = layout_vals[cfg.layout].c.a;
-	cmdv[2][ARG2I] = layout_vals[cfg.layout].c.b;
-
-	cmdv[3][ARG1I] = pulsate_vals[cfg.usb.pulse].a;
-	cmdv[3][ARG2I] = pulsate_vals[cfg.usb.pulse].b;
-
-	cmdv[4][ARG1I] = light_levels[cfg.usb.brightness].a;
-	cmdv[4][ARG2I] = light_levels[cfg.usb.brightness].b;
+void usb_async_poll(void)
+{
+	libusb_handle_events_completed(NULL, NULL);
 }
 
 void usb_sync()
@@ -119,10 +138,8 @@ void usb_sync()
 	unsigned char cmdv[CMDS_MAX][CMD_LEN];
 	int ok = 0;
 
-	g_rec_mutex_lock(&_lock);
-
 	if (_devh == NULL) {
-		goto out;
+		return;
 	}
 
 	err = libusb_get_config_descriptor(libusb_get_device(_devh), 0, &dcfg);
@@ -188,23 +205,19 @@ void usb_sync()
 	ok = 1;
 
 out:
-	if (_devh != NULL) {
-		libusb_release_interface(_devh, wINDEX);
+	libusb_release_interface(_devh, wINDEX);
 
-		for (i = 0; i < dcfg->bNumInterfaces; i++) {
-			libusb_attach_kernel_driver(_devh,
-				dcfg->interface[i].altsetting->bInterfaceNumber);
-		}
-
-		libusb_free_config_descriptor(dcfg);
-
-		if (!ok) {
-			libusb_close(_devh);
-			_devh = NULL;
-		}
+	for (i = 0; i < dcfg->bNumInterfaces; i++) {
+		libusb_attach_kernel_driver(_devh,
+			dcfg->interface[i].altsetting->bInterfaceNumber);
 	}
 
-	g_rec_mutex_unlock(&_lock);
+	libusb_free_config_descriptor(dcfg);
+
+	if (!ok) {
+		libusb_close(_devh);
+		_devh = NULL;
+	}
 }
 
 void usb_perror(int err, const char *format, ...)

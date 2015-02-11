@@ -24,6 +24,8 @@
  */
 #define VENDOR UINT16_C(0x1532)
 #define PRODUCT UINT16_C(0x0201)
+#define VENDOR_NO_X UINT16_C(1532)
+#define PRODUCT_NO_X UINT16_C(0201)
 
 /**
  * For sending lighting commands to the device

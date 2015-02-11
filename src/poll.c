@@ -18,8 +18,10 @@
 
 #include <errno.h>
 #include <glib.h>
+#include <libusb.h>
 #include <poll.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/inotify.h>
 #include <unistd.h>
@@ -50,16 +52,28 @@ void poll_init()
 
 void poll_run()
 {
+	const guint static_events = 2;
+
+	guint i;
 	int err;
+	guint usb_fdsc;
 	char buff[1024];
-	struct pollfd fds[] = {
-		{	.fd = _ifd,
-			.events = POLLIN,
-		},
-		{	.fd = x_get_fd(),
-			.events = POLLIN,
-		},
-	};
+	gboolean poll_usb = FALSE;
+	const struct libusb_pollfd **usb_fds = usb_get_pollfds(&usb_fdsc);
+	struct pollfd fds[static_events + usb_fdsc];
+
+	fds[0].fd = _ifd;
+	fds[0].events = POLLIN;
+
+	fds[1].fd = x_get_fd();
+	fds[1].events = POLLIN;
+
+	for (i = 0; i < usb_fdsc; i++) {
+		fds[static_events + i].fd = usb_fds[i]->fd;
+		fds[static_events + i].events = usb_fds[i]->events;
+	}
+
+	free(usb_fds);
 
 	err = poll(fds, G_N_ELEMENTS(fds), -1);
 	if (err == -1) {
@@ -75,5 +89,13 @@ void poll_run()
 
 	if (fds[1].revents & POLLIN) {
 		x_poll();
+	}
+
+	for (i = 0; i < usb_fdsc; i++) {
+		poll_usb |= fds[static_events + i].revents != 0;
+	}
+
+	if (poll_usb) {
+		usb_async_poll();
 	}
 }

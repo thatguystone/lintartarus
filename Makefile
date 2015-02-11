@@ -6,8 +6,10 @@ BIN = lintartarus
 OBJECTS = \
 	$(SRC)/config.o \
 	$(SRC)/const.o \
+	$(SRC)/layout.o \
 	$(SRC)/lintartarus.o \
 	$(SRC)/poll.o \
+	$(SRC)/udev.o \
 	$(SRC)/usb.o \
 	$(SRC)/usb_dump.o \
 	$(SRC)/x.o

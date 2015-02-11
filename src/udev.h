@@ -17,49 +17,9 @@
  */
 
 #pragma once
-#include "usb.h"
 
 /**
- * Default config file when one doesn't exist
+ * Create a udev file authorizing the named user to access the device without
+ * root permissions.
  */
-#define DEFAULT_CONFIG \
-	"[default]\n" \
-	"pulse = false\n" \
-	"brightness = low\n" \
-	"next-layout = ctrl+alt+shift+n\n" \
-	"prev-layout = ctrl+alt+shift+p\n"
-
-/**
- * Configuration options
- */
-struct config{
-	char *config_dir;
-
-	// 1-based, to be consistent with the windows util
-	int layout;
-
-	struct {
-		char *next;
-		char *prev;
-	} hotkeys;
-
-	struct {
-		int pulse;
-		enum usb_brightness brightness;
-	} usb;
-};
-
-/**
- * Global config
- */
-struct config cfg;
-
-/**
- * Setup global config
- */
-void cfg_init(int argc, char **argv);
-
-/**
- * Reload configuration files
- */
-void cfg_reload(void);
+void udev_authorize(const char *user);

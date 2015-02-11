@@ -143,7 +143,7 @@ def set_layout(i):
 
 def main():
 	# set_layout(8)
-	set_light('o')
+	set_light('l')
 	# solid()
 
 if __name__ == '__main__':

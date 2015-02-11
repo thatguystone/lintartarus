@@ -16,50 +16,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
-#include "usb.h"
+#include <stdio.h>
+#include "layout.h"
 
-/**
- * Default config file when one doesn't exist
- */
-#define DEFAULT_CONFIG \
-	"[default]\n" \
-	"pulse = false\n" \
-	"brightness = low\n" \
-	"next-layout = ctrl+alt+shift+n\n" \
-	"prev-layout = ctrl+alt+shift+p\n"
+void layout_next()
+{
+	printf("layout_next\n");
+}
 
-/**
- * Configuration options
- */
-struct config{
-	char *config_dir;
-
-	// 1-based, to be consistent with the windows util
-	int layout;
-
-	struct {
-		char *next;
-		char *prev;
-	} hotkeys;
-
-	struct {
-		int pulse;
-		enum usb_brightness brightness;
-	} usb;
-};
-
-/**
- * Global config
- */
-struct config cfg;
-
-/**
- * Setup global config
- */
-void cfg_init(int argc, char **argv);
-
-/**
- * Reload configuration files
- */
-void cfg_reload(void);
+void layout_prev()
+{
+	printf("layout_prev\n");
+}

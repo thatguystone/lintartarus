@@ -17,49 +17,13 @@
  */
 
 #pragma once
-#include "usb.h"
 
 /**
- * Default config file when one doesn't exist
+ * Advance to the next layout for the active program
  */
-#define DEFAULT_CONFIG \
-	"[default]\n" \
-	"pulse = false\n" \
-	"brightness = low\n" \
-	"next-layout = ctrl+alt+shift+n\n" \
-	"prev-layout = ctrl+alt+shift+p\n"
+void layout_next(void);
 
 /**
- * Configuration options
+ * Step back to the previous layout for the active program
  */
-struct config{
-	char *config_dir;
-
-	// 1-based, to be consistent with the windows util
-	int layout;
-
-	struct {
-		char *next;
-		char *prev;
-	} hotkeys;
-
-	struct {
-		int pulse;
-		enum usb_brightness brightness;
-	} usb;
-};
-
-/**
- * Global config
- */
-struct config cfg;
-
-/**
- * Setup global config
- */
-void cfg_init(int argc, char **argv);
-
-/**
- * Reload configuration files
- */
-void cfg_reload(void);
+void layout_prev(void);

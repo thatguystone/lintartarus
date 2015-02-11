@@ -22,11 +22,12 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include "config.h"
+#include "layout.h"
 #include "x.h"
 
 struct _binding {
 	guint modifiers;
-	int keycode;
+	guint keycode;
 };
 
 static Window _root;
@@ -103,13 +104,20 @@ void x_sync()
 
 void x_poll()
 {
-	XEvent ev;
+	union {
+		XEvent ev;
+		XKeyEvent kev;
+	} xev;
 
 	while (XPending(_display)) {
-		XNextEvent(_display, &ev);
-		switch (ev.type) {
+		XNextEvent(_display, &xev.ev);
+		switch (xev.ev.type) {
 			case KeyPress:
-				printf("Hot key pressed!\n");
+				if (xev.kev.keycode == _layout_next.keycode) {
+					layout_next();
+				} else if (xev.kev.keycode == _layout_prev.keycode) {
+					layout_prev();
+				}
 				break;
 
 			default:
