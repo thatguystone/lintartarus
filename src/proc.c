@@ -18,15 +18,66 @@
 
 #include <glib.h>
 #include <stdio.h>
+#include <string.h>
+#include "config.h"
 #include "proc.h"
 
-static gboolean _check_cmd(const char *cmd G_GNUC_UNUSED)
+static void _set_active(const guint progi)
 {
+	struct program *prog = g_ptr_array_index(cfg.programs, progi);
+
+	printf("%s\n", prog->name);
+}
+
+static gboolean _check_cmd(const char *cmd)
+{
+	guint i;
+	guint j;
+	char *patt;
+	struct program *prog;
+
+	for (i = 0; i < cfg.programs->len; i++) {
+		prog = g_ptr_array_index(cfg.programs, i);
+
+		for (j = 0; j < prog->cmds->len; j++) {
+			patt = g_ptr_array_index(prog->cmds, j);
+			if (strstr(cmd, patt) != NULL) {
+				_set_active(j);
+				return TRUE;
+			}
+		}
+	}
+
 	return FALSE;
 }
 
-static gboolean _check_exec(const char *bin G_GNUC_UNUSED)
+static gboolean _check_exec(const char *exe)
 {
+	guint i;
+	guint j;
+	char *patt;
+	gboolean match;
+	struct program *prog;
+
+	for (i = 0; i < cfg.programs->len; i++) {
+		prog = g_ptr_array_index(cfg.programs, i);
+
+		for (j = 0; j < prog->exes->len; j++) {
+			patt = g_ptr_array_index(prog->exes, j);
+
+			if (*patt == '/') {
+				match = g_strcmp0(exe, patt) == 0;
+			} else {
+				match = strstr(exe, patt) != NULL;
+			}
+
+			if (match) {
+				_set_active(j);
+				return TRUE;
+			}
+		}
+	}
+
 	return FALSE;
 }
 
@@ -39,18 +90,19 @@ void proc_sync()
 	char *contents;
 	const char *path;
 	GString *buff = g_string_new("");
+	GError *error = NULL;
 
 	dir = g_dir_open("/proc", 0, NULL);
 	while ((path = g_dir_read_name(dir))) {
 		pid = g_ascii_strtoull(path, &end, 10);
 
-		// Directory name not a number, so not a pid
+		// Directory isn't a number, so not a pid
 		if (*end != '\0') {
 			continue;
 		}
 
-		g_string_printf(buff, "/proc/%d/cmd", pid);
-		ok = g_file_get_contents(buff->str, &contents, NULL, NULL);
+		g_string_printf(buff, "/proc/%d/cmdline", pid);
+		ok = g_file_get_contents(buff->str, &contents, NULL, &error);
 		if (ok && _check_cmd(contents)) {
 			break;
 		}
