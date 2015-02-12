@@ -36,4 +36,4 @@ void x_poll(void);
 /**
  * Get the X socket in use
  */
-int x_get_fd(void);
+int x_fd(void);

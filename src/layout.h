@@ -17,6 +17,14 @@
  */
 
 #pragma once
+#include <glib.h>
+
+/**
+ * A layout for the tartarus
+ */
+struct layout {
+	char *keys[15 + 4 + 2];
+};
 
 /**
  * Advance to the next layout for the active program
@@ -27,3 +35,14 @@ void layout_next(void);
  * Step back to the previous layout for the active program
  */
 void layout_prev(void);
+
+/**
+ * Get the name of the key, as printed on the device.
+ */
+const char* layout_get_name(const guint i);
+
+/**
+ * Get the default key for the pad at the given index. Free it when you're
+ * done.
+ */
+char* layout_get_default(const guint i);

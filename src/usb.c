@@ -51,12 +51,12 @@ static void _build_cmds(unsigned char cmdv[CMDS_MAX][CMD_LEN])
 	memcpy(cmdv[3], pulsate_cmd, CMD_LEN);
 	memcpy(cmdv[4], light_level_cmd, CMD_LEN);
 
-	cmdv[0][ARG1I] = layout_vals[cfg.layout - 1].a.a;
-	cmdv[0][ARG2I] = layout_vals[cfg.layout - 1].a.b;
-	cmdv[1][ARG1I] = layout_vals[cfg.layout - 1].b.a;
-	cmdv[1][ARG2I] = layout_vals[cfg.layout - 1].b.b;
-	cmdv[2][ARG1I] = layout_vals[cfg.layout - 1].c.a;
-	cmdv[2][ARG2I] = layout_vals[cfg.layout - 1].c.b;
+	cmdv[0][ARG1I] = layout_vals[cfg.layout].a.a;
+	cmdv[0][ARG2I] = layout_vals[cfg.layout].a.b;
+	cmdv[1][ARG1I] = layout_vals[cfg.layout].b.a;
+	cmdv[1][ARG2I] = layout_vals[cfg.layout].b.b;
+	cmdv[2][ARG1I] = layout_vals[cfg.layout].c.a;
+	cmdv[2][ARG2I] = layout_vals[cfg.layout].c.b;
 
 	cmdv[3][ARG1I] = pulsate_vals[cfg.usb.pulse].a;
 	cmdv[3][ARG2I] = pulsate_vals[cfg.usb.pulse].b;
@@ -73,6 +73,9 @@ static int _hotplug(
 {
 	int err;
 
+	libusb_close(_devh);
+	_devh = NULL;
+
 	if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED) {
 		err = libusb_open(dev, &_devh);
 		if (err != 0) {
@@ -80,9 +83,6 @@ static int _hotplug(
 		} else {
 			usb_sync();
 		}
-	} else {
-		libusb_close(_devh);
-		_devh = NULL;
 	}
 
 	return 0;

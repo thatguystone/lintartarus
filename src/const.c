@@ -85,6 +85,21 @@ const struct light_val pulsate_vals[] = {
 };
 
 const struct layout_val layout_vals[] = {
+	// Unlike windows, layout 0 is all lights off
+	{	.a = {
+			.a = 0x00,
+			.b = 0x0d
+		},
+		.b = {
+			.a = 0x00,
+			.b = 0x0c,
+		},
+		.c = {
+			.a = 0x00,
+			.b = 0x0f
+		},
+	},
+
 	{	.a = {
 			.a = 0x00,
 			.b = 0x0d
@@ -174,19 +189,6 @@ const struct layout_val layout_vals[] = {
 		.c = {
 			.a = 0x01,
 			.b = 0x0e
-		},
-	},
-	{	.a = {
-			.a = 0x00,
-			.b = 0x0d
-		},
-		.b = {
-			.a = 0x00,
-			.b = 0x0c,
-		},
-		.c = {
-			.a = 0x00,
-			.b = 0x0f
 		},
 	},
 };

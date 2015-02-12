@@ -17,6 +17,7 @@
  */
 
 #pragma once
+#include "layout.h"
 #include "usb.h"
 
 /**
@@ -26,8 +27,34 @@
 	"[default]\n" \
 	"pulse = false\n" \
 	"brightness = low\n" \
+	"launch = ctrl+alt+shift+l\n" \
 	"next-layout = ctrl+alt+shift+n\n" \
 	"prev-layout = ctrl+alt+shift+p\n"
+
+/**
+ * A configured program, complete with layouts and everything!
+ */
+struct program {
+	/**
+	 * User-configured name
+	 */
+	char *name;
+
+	/**
+	 * A bunch of strings
+	 */
+	GPtrArray *cmds;
+
+	/**
+	 * Even more strings
+	 */
+	GPtrArray *exes;
+
+	/**
+	 * A bunch of layouts
+	 */
+	GPtrArray *layouts;
+};
 
 /**
  * Configuration options
@@ -35,10 +62,12 @@
 struct config{
 	char *config_dir;
 
-	// 1-based, to be consistent with the windows util
 	int layout;
 
+	GPtrArray *programs;
+
 	struct {
+		char *launch;
 		char *next;
 		char *prev;
 	} hotkeys;
@@ -58,6 +87,16 @@ struct config cfg;
  * Setup global config
  */
 void cfg_init(int argc, char **argv);
+
+/**
+ * Dump out parsed config values
+ */
+void cfg_dump(void);
+
+/**
+ * Get fd to poll on
+ */
+int cfg_fd(void);
 
 /**
  * Reload configuration files

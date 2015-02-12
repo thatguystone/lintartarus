@@ -16,20 +16,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "config.h"
-#include "poll.h"
-#include "usb.h"
-#include "x.h"
+#pragma once
 
-int main(int argc, char **argv)
-{
-	x_init();
-	cfg_init(argc, argv);
-	usb_init();
-
-	while (1) {
-		poll_run();
-	}
-
-	return 0;
-}
+/**
+ * User requested a poll of running processes
+ */
+void proc_sync(void);

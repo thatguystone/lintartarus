@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/inotify.h>
 #include <unistd.h>
 #include <wordexp.h>
 #include "config.h"
@@ -31,6 +32,11 @@
 #include "x.h"
 
 #define INDENT "    "
+
+/**
+ * Inotify fd for watching for config changes
+ */
+static int _ifd;
 
 static void _print_opt(const char *s, const char *arg, const char *desc)
 {
@@ -51,7 +57,8 @@ static void _print_usage(char **argv)
 	_print_opt("a GROUP", "authorize=GROUP", "add a udev rule to allow the given group to access the device without root");
 	_print_opt("c DIR", "config-dir=DIR", "directory to use for config files (~/.config/lintartarus)");
 	_print_opt("d", "daemonize", "run in the background as a daemon");
-	_print_opt(NULL, "dump", "dump USB debugging info");
+	_print_opt(NULL, "dump-config", "dump parse config values");
+	_print_opt(NULL, "dump-usb", "dump USB debugging info");
 	_print_opt("h", "help", "print this message");
 
 	exit(2);
@@ -104,13 +111,94 @@ static void _key_layout(
 	}
 }
 
+static void _layout_free(void *l_)
+{
+	guint i;
+	struct layout *l = l_;
+
+	for (i = 0; i < G_N_ELEMENTS(l->keys); i++) {
+		g_free(l->keys[i]);
+	}
+
+	g_free(l);
+}
+
+static struct layout* _layout_new(void)
+{
+	guint i;
+	struct layout *l = g_malloc0(sizeof(*l));
+
+	for (i = 0; i < G_N_ELEMENTS(l->keys); i++) {
+		l->keys[i] = layout_get_default(i);
+	}
+
+	return l;
+}
+
+static void _program_free(void *prog_)
+{
+	struct program *prog = prog_;
+	g_ptr_array_free(prog->cmds, TRUE);
+	g_ptr_array_free(prog->exes, TRUE);
+	g_ptr_array_free(prog->layouts, TRUE);
+	g_free(prog->name);
+	g_free(prog);
+}
+
+static void _build_progs(GKeyFile *kf)
+{
+	size_t i;
+	size_t j;
+	char **groups;
+	size_t groupsc;
+	struct program *prog;
+
+	if (cfg.programs != NULL) {
+		g_ptr_array_free(cfg.programs, TRUE);
+	}
+
+	cfg.programs = g_ptr_array_new_with_free_func(_program_free);
+
+	groups = g_key_file_get_groups(kf, &groupsc);
+	for (i = 0; i < groupsc; i++) {
+		if (g_str_equal(groups[i], "default")) {
+			continue;
+		}
+
+		prog = NULL;
+		for (j = 0; j < cfg.programs->len; j++) {
+			struct program *p = g_ptr_array_index(cfg.programs, j);
+			if (g_str_equal(p->name, groups[i])) {
+				prog = p;
+				break;
+			}
+		}
+
+		if (prog == NULL) {
+			prog = g_malloc0(sizeof(*prog));
+			prog->name = g_strdup(groups[i]);
+			prog->cmds = g_ptr_array_new_with_free_func(g_free);
+			prog->exes = g_ptr_array_new_with_free_func(g_free);
+			prog->layouts = g_ptr_array_new_with_free_func(_layout_free);
+			g_ptr_array_add(cfg.programs, prog);
+		}
+
+		g_ptr_array_add(prog->layouts, _layout_new());
+	}
+
+	g_strfreev(groups);
+}
+
 void cfg_init(int argc, char **argv)
 {
+	int err;
+	gboolean dump_cfg = FALSE;
 	struct option lopts[] = {
 		{ "authorize", required_argument, NULL, 'a' },
 		{ "config-dir", required_argument, NULL, 'c' },
 		{ "daemonize", no_argument, NULL, 'd' },
-		{ "dump", no_argument, NULL, '\1' },
+		{ "dump-config", no_argument, NULL, '\1' },
+		{ "dump-usb", no_argument, NULL, '\2' },
 		{ "help", no_argument, NULL, 'h' },
 		{ NULL, 0, NULL, 0 },
 	};
@@ -125,6 +213,10 @@ void cfg_init(int argc, char **argv)
 
 		switch (c) {
 			case '\1':
+				dump_cfg = TRUE;
+				break;
+
+			case '\2':
 				usb_dump();
 				exit(0);
 				break;
@@ -150,20 +242,92 @@ void cfg_init(int argc, char **argv)
 		_set_config_dir("~/.config/lintartarus");
 	}
 
-	cfg.layout = 8;
+	_ifd = inotify_init1(IN_NONBLOCK);
+	if (_ifd == -1) {
+		g_error("failed to create inotify instance: %s", strerror(errno));
+	}
+
 	cfg_reload();
+
+	err = inotify_add_watch(_ifd, cfg.config_dir, IN_CLOSE_WRITE | IN_MOVED_TO);
+	if (err == -1) {
+		g_error("failed to watch config directory: %s", strerror(errno));
+	}
+
+	if (dump_cfg) {
+		cfg_dump();
+		exit(0);
+	}
+}
+
+static const char* _brightness_str(int brightness)
+{
+	switch (brightness) {
+		case bright_off:  return "off";
+		case bright_low:  return "low";
+		case bright_med:  return "med";
+		case bright_high: return "high";
+		default:          return "unknown";
+	}
+}
+
+void cfg_dump(void)
+{
+	guint i;
+	guint j;
+	guint k;
+
+	printf("config dir: %s\n", cfg.config_dir);
+	printf("pulse: %s\n", cfg.usb.pulse ? "true" : "false");
+	printf("brightness: %s\n", _brightness_str(cfg.usb.brightness));
+	printf("\n");
+	printf("hotkeys:\n");
+	printf(INDENT "launch:      %s\n", cfg.hotkeys.launch);
+	printf(INDENT "next-layout: %s\n", cfg.hotkeys.next);
+	printf(INDENT "prev-layout: %s\n", cfg.hotkeys.prev);
+	printf("\n");
+	printf("programs (%u):\n", cfg.programs->len);
+
+	for (i = 0; i < cfg.programs->len; i++) {
+		struct program *prog = g_ptr_array_index(cfg.programs, i);
+
+		printf("    %s (%u):\n", prog->name, prog->layouts->len);
+
+		for (j = 0; j < prog->layouts->len; j++) {
+			struct layout *l = g_ptr_array_index(prog->layouts, i);
+
+			for (k = 0; k < G_N_ELEMENTS(l->keys); k++) {
+				printf(INDENT INDENT "%s => %s\n",
+					layout_get_name(k),
+					l->keys[i]);
+			}
+		}
+	}
+
+	printf("\n");
+}
+
+int cfg_fd()
+{
+	return _ifd;
 }
 
 void cfg_reload()
 {
 	int err;
 	GDir *dir;
-	GKeyFile *f;
+	GKeyFile *kf;
 	gboolean ok;
+	char *contents;
+	char ifdbuf[1024];
 	const char *path;
 	char *brightness;
 	GError *error = NULL;
 	GString *buff = g_string_new("");
+	GString *config = g_string_new("");
+
+	// Don't care about what happened, just that something did
+	while (read(_ifd, ifdbuf, sizeof(ifdbuf)) > 0);
 
 	if (!g_file_test(cfg.config_dir, G_FILE_TEST_IS_DIR)) {
 		err = g_mkdir_with_parents(cfg.config_dir, 0700);
@@ -182,26 +346,38 @@ void cfg_reload()
 		}
 	}
 
-	f = g_key_file_new();
 	dir = g_dir_open(cfg.config_dir, 0, NULL);
 	while ((path = g_dir_read_name(dir))) {
 		g_string_printf(buff, "%s/%s", cfg.config_dir, path);
-		ok = g_key_file_load_from_file(f, buff->str, 0, &error);
-		if (!ok && error->code != G_FILE_ERROR_NOENT) {
+		ok = g_file_get_contents(buff->str, &contents, NULL, &error);
+
+		if (ok) {
+			g_string_append_c(config, '\n');
+			g_string_append(config, contents);
+			g_free(contents);
+		} else if (error->code != G_FILE_ERROR_NOENT) {
 			g_critical("failed to open config \"%s\": %s\n",
 				buff->str,
 				error->message);
 		}
+
 		g_clear_error(&error);
 	}
 
-	cfg.usb.pulse = g_key_file_get_boolean(f, "default", "pulse", &error);
+	kf = g_key_file_new();
+	ok = g_key_file_load_from_data(kf, config->str, config->len, 0, &error);
+	if (!ok) {
+		g_critical("failed to parse config: %s\n", error->message);
+		g_clear_error(&error);
+	}
+
+	cfg.usb.pulse = g_key_file_get_boolean(kf, "default", "pulse", &error);
 	if (error != NULL) {
 		g_critical("invalid pulse config, defaulting to false");
 		g_clear_error(&error);
 	}
 
-	brightness = g_key_file_get_string(f, "default", "brightness", NULL);
+	brightness = g_key_file_get_string(kf, "default", "brightness", NULL);
 	if (g_strcmp0(brightness, "off") == 0) {
 		cfg.usb.brightness = bright_off;
 	} else if (g_strcmp0(brightness, "low") == 0) {
@@ -215,13 +391,17 @@ void cfg_reload()
 		g_critical("invalid brightness config, defaulting to low");
 	}
 
-	_key_layout(f, "next-layout", &cfg.hotkeys.next, "ctrl+alt+shift+n");
-	_key_layout(f, "prev-layout", &cfg.hotkeys.prev, "ctrl+alt+shift+p");
+	_key_layout(kf, "launch", &cfg.hotkeys.launch, "ctrl+alt+shift+l");
+	_key_layout(kf, "next-layout", &cfg.hotkeys.next, "ctrl+alt+shift+n");
+	_key_layout(kf, "prev-layout", &cfg.hotkeys.prev, "ctrl+alt+shift+p");
+
+	_build_progs(kf);
 
 	g_free(brightness);
 	g_dir_close(dir);
-	g_key_file_free(f);
+	g_key_file_free(kf);
 	g_string_free(buff, TRUE);
+	g_string_free(config, TRUE);
 
 	x_sync();
 	usb_sync();

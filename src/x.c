@@ -17,24 +17,35 @@
  */
 
 #include <glib.h>
-#include <stdio.h>
 #include <string.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include "config.h"
 #include "layout.h"
+#include "proc.h"
 #include "x.h"
 
 struct _binding {
+	char **cfg;
 	guint modifiers;
 	guint keycode;
+	void (*cb)(void);
 };
 
 static Window _root;
 static Display *_display;
 
-static struct _binding _layout_next;
-static struct _binding _layout_prev;
+static struct _binding _bindings[] = {
+	{	.cfg = &cfg.hotkeys.launch,
+		.cb = proc_sync,
+	},
+	{	.cfg = &cfg.hotkeys.next,
+		.cb = layout_next,
+	},
+	{	.cfg = &cfg.hotkeys.prev,
+		.cb = layout_prev,
+	},
+};
 
 static void _parse_binding(const char *combo, struct _binding *b)
 {
@@ -42,7 +53,7 @@ static void _parse_binding(const char *combo, struct _binding *b)
 	char **iter;
 	char **parts = g_strsplit(combo, "+", 0);
 
-	memset(b, 0, sizeof(*b));
+	b->modifiers = b->keycode = 0;
 
 	iter = parts;
 	while (*iter != NULL) {
@@ -60,7 +71,7 @@ static void _parse_binding(const char *combo, struct _binding *b)
 		} else if (strlen(k) == 1) {
 			b->keycode = XKeysymToKeycode(_display, XStringToKeysym(k));
 		} else {
-			g_error("unknown key: %s", k);
+			g_critical("ignoring unknown key: %s", k);
 		}
 
 		g_free(k);
@@ -79,24 +90,20 @@ void x_init()
 
 void x_sync()
 {
-	XUngrabKey(_display,
-		_layout_next.keycode, _layout_next.modifiers,
-		_root);
-	XUngrabKey(_display,
-		_layout_prev.keycode, _layout_prev.modifiers,
-		_root);
+	guint i;
 
-	_parse_binding(cfg.hotkeys.next, &_layout_next);
-	_parse_binding(cfg.hotkeys.prev, &_layout_prev);
+	for (i = 0; i < G_N_ELEMENTS(_bindings); i++) {
+		struct _binding *b = &_bindings[i];
 
-	XGrabKey(_display,
-		_layout_next.keycode, _layout_next.modifiers,
-		_root, 0,
-		GrabModeAsync, GrabModeAsync);
-	XGrabKey(_display,
-		_layout_prev.keycode, _layout_prev.modifiers,
-		_root, 0,
-		GrabModeAsync, GrabModeAsync);
+		XUngrabKey(_display, b->keycode, b->modifiers, _root);
+
+		_parse_binding(*b->cfg, b);
+
+		XGrabKey(_display,
+			b->keycode, b->modifiers,
+			_root, 0,
+			GrabModeAsync, GrabModeAsync);
+	}
 
 	// For some reason, without this, poll never fires...
 	XPending(_display);
@@ -104,6 +111,7 @@ void x_sync()
 
 void x_poll()
 {
+	guint i;
 	union {
 		XEvent ev;
 		XKeyEvent kev;
@@ -113,10 +121,13 @@ void x_poll()
 		XNextEvent(_display, &xev.ev);
 		switch (xev.ev.type) {
 			case KeyPress:
-				if (xev.kev.keycode == _layout_next.keycode) {
-					layout_next();
-				} else if (xev.kev.keycode == _layout_prev.keycode) {
-					layout_prev();
+				for (i = 0; i < G_N_ELEMENTS(_bindings); i++) {
+					struct _binding *b = &_bindings[i];
+					if (xev.kev.keycode == b->keycode &&
+						xev.kev.state == b->modifiers) {
+
+						b->cb();
+					}
 				}
 				break;
 
@@ -126,7 +137,7 @@ void x_poll()
 	}
 }
 
-int x_get_fd()
+int x_fd()
 {
 	return XConnectionNumber(_display);
 }

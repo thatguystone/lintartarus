@@ -9,6 +9,7 @@ OBJECTS = \
 	$(SRC)/layout.o \
 	$(SRC)/lintartarus.o \
 	$(SRC)/poll.o \
+	$(SRC)/proc.o \
 	$(SRC)/udev.o \
 	$(SRC)/usb.o \
 	$(SRC)/usb_dump.o \

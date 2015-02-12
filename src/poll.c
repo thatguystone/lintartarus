@@ -23,32 +23,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/inotify.h>
 #include <unistd.h>
 #include "config.h"
 #include "poll.h"
 #include "usb.h"
 #include "x.h"
-
-/**
- * Inotify fd for watching for config changes
- */
-static int _ifd;
-
-void poll_init()
-{
-	int err;
-
-	_ifd = inotify_init1(IN_NONBLOCK);
-	if (_ifd == -1) {
-		g_error("failed to create inotify instance: %s", strerror(errno));
-	}
-
-	err = inotify_add_watch(_ifd, cfg.config_dir, IN_CLOSE_WRITE | IN_MOVED_TO);
-	if (err == -1) {
-		g_error("failed to watch config directory: %s", strerror(errno));
-	}
-}
 
 void poll_run()
 {
@@ -57,15 +36,14 @@ void poll_run()
 	guint i;
 	int err;
 	guint usb_fdsc;
-	char buff[1024];
 	gboolean poll_usb = FALSE;
 	const struct libusb_pollfd **usb_fds = usb_get_pollfds(&usb_fdsc);
 	struct pollfd fds[static_events + usb_fdsc];
 
-	fds[0].fd = _ifd;
+	fds[0].fd = cfg_fd();;
 	fds[0].events = POLLIN;
 
-	fds[1].fd = x_get_fd();
+	fds[1].fd = x_fd();
 	fds[1].events = POLLIN;
 
 	for (i = 0; i < usb_fdsc; i++) {
@@ -81,9 +59,6 @@ void poll_run()
 	}
 
 	if (fds[0].revents & POLLIN) {
-		// Don't care about what happened, just that something did
-		while (read(_ifd, buff, sizeof(buff)) > 0);
-
 		cfg_reload();
 	}
 
