@@ -23,6 +23,14 @@
  * A layout for the tartarus
  */
 struct layout {
+	/**
+	 * ID specified in config file
+	 */
+	guint id;
+
+	/**
+	 * Kep mapping
+	 */
 	char *keys[15 + 4 + 2];
 };
 

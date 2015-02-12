@@ -111,6 +111,13 @@ static void _key_layout(
 	}
 }
 
+static int _strcmp(const void *a_, const void *b_)
+{
+	const char * const *a = a_;
+	const char * const *b = b_;
+	return g_strcmp0(*a, *b);
+}
+
 static void _layout_free(void *l_)
 {
 	guint i;
@@ -135,6 +142,13 @@ static struct layout* _layout_new(void)
 	return l;
 }
 
+static int _layout_cmp(const void *a_, const void *b_)
+{
+	const struct layout * const *a = a_;
+	const struct layout * const *b = b_;
+	return (*a)->id - (*b)->id;
+}
+
 static void _program_free(void *prog_)
 {
 	struct program *prog = prog_;
@@ -145,10 +159,82 @@ static void _program_free(void *prog_)
 	g_free(prog);
 }
 
+static int _program_cmp(const void *a_, const void *b_)
+{
+	const struct program * const *a = a_;
+	const struct program * const *b = b_;
+	return g_strcmp0((*a)->name, (*b)->name);
+}
+
+static void _parse_program(
+	struct program *prog G_GNUC_UNUSED,
+	GKeyFile *kf,
+	const char *group_name)
+{
+	size_t i;
+	char *val;
+	char **keys;
+	GPtrArray *ary;
+	size_t len = 0;
+
+	keys = g_key_file_get_keys(kf, group_name, &len, NULL);
+	for (i = 0; i < len; i++) {
+		ary = NULL;
+		if (g_str_has_prefix(keys[i], "cmd")) {
+			ary = prog->cmds;
+		} else if (g_str_has_prefix(keys[i], "exe")) {
+			ary = prog->exes;
+		}
+
+		if (ary != NULL) {
+			val = g_key_file_get_string(kf, group_name, keys[i], NULL);
+			g_ptr_array_add(ary, g_strdup(val));
+		}
+	}
+
+	g_strfreev(keys);
+}
+
+static void _parse_layout(
+	struct program *prog,
+	GKeyFile *kf,
+	const char *group_name,
+	const char *main_group,
+	const char *layout_id)
+{
+	guint i;
+	guint id;
+	char *val;
+	char *end;
+	struct layout *l;
+
+	id = g_ascii_strtoull(layout_id, &end, 10);
+	if (*end != '\0') {
+		g_critical("ignoring invalid layout id for %s: %s",
+			main_group,
+			layout_id);
+		return;
+	}
+
+	l = _layout_new();
+	l->id = id;
+
+	for (i = 0; i < G_N_ELEMENTS(l->keys); i++) {
+		val = g_key_file_get_string(kf, group_name, layout_get_name(i), NULL);
+		if (val != NULL) {
+			g_free(l->keys[i]);
+			l->keys[i] = val;
+		}
+	}
+
+	g_ptr_array_add(prog->layouts, l);
+}
+
 static void _build_progs(GKeyFile *kf)
 {
 	size_t i;
 	size_t j;
+	char **parts;
 	char **groups;
 	size_t groupsc;
 	struct program *prog;
@@ -165,10 +251,11 @@ static void _build_progs(GKeyFile *kf)
 			continue;
 		}
 
+		parts = g_strsplit(groups[i], ":", 0);
 		prog = NULL;
 		for (j = 0; j < cfg.programs->len; j++) {
 			struct program *p = g_ptr_array_index(cfg.programs, j);
-			if (g_str_equal(p->name, groups[i])) {
+			if (g_str_equal(p->name, parts[0])) {
 				prog = p;
 				break;
 			}
@@ -176,17 +263,31 @@ static void _build_progs(GKeyFile *kf)
 
 		if (prog == NULL) {
 			prog = g_malloc0(sizeof(*prog));
-			prog->name = g_strdup(groups[i]);
+			prog->name = g_strdup(parts[0]);
 			prog->cmds = g_ptr_array_new_with_free_func(g_free);
 			prog->exes = g_ptr_array_new_with_free_func(g_free);
 			prog->layouts = g_ptr_array_new_with_free_func(_layout_free);
 			g_ptr_array_add(cfg.programs, prog);
 		}
 
-		g_ptr_array_add(prog->layouts, _layout_new());
+		if (g_strv_length(parts) == 1) {
+			_parse_program(prog, kf, parts[0]);
+		} else {
+			_parse_layout(prog, kf, groups[i], parts[0], parts[1]);
+		}
+
+		g_strfreev(parts);
 	}
 
 	g_strfreev(groups);
+
+	g_ptr_array_sort(cfg.programs, _program_cmp);
+	for (i = 0; i < cfg.programs->len; i++) {
+		prog = g_ptr_array_index(cfg.programs, i);
+		g_ptr_array_sort(prog->cmds, _strcmp);
+		g_ptr_array_sort(prog->exes, _strcmp);
+		g_ptr_array_sort(prog->layouts, _layout_cmp);
+	}
 }
 
 void cfg_init(int argc, char **argv)
@@ -291,15 +392,31 @@ void cfg_dump(void)
 	for (i = 0; i < cfg.programs->len; i++) {
 		struct program *prog = g_ptr_array_index(cfg.programs, i);
 
-		printf("    %s (%u):\n", prog->name, prog->layouts->len);
+		printf(INDENT "%s (layouts: %u):\n", prog->name, prog->layouts->len);
+
+		printf(INDENT INDENT "cmds (%u):\n", prog->cmds->len);
+		for (j = 0; j < prog->cmds->len; j++) {
+			char *s = g_ptr_array_index(prog->cmds, j);
+			printf(INDENT INDENT INDENT "%s\n", s);
+		}
+
+		printf(INDENT INDENT "exes (%u):\n", prog->exes->len);
+		for (j = 0; j < prog->exes->len; j++) {
+			char *s = g_ptr_array_index(prog->exes, j);
+			printf(INDENT INDENT INDENT "%s: %s\n",
+				*s == '/' ? "abs" : "rel",
+				s);
+		}
 
 		for (j = 0; j < prog->layouts->len; j++) {
-			struct layout *l = g_ptr_array_index(prog->layouts, i);
+			struct layout *l = g_ptr_array_index(prog->layouts, j);
+
+			printf(INDENT INDENT "layout %u:\n", j + 1);
 
 			for (k = 0; k < G_N_ELEMENTS(l->keys); k++) {
-				printf(INDENT INDENT "%s => %s\n",
+				printf(INDENT INDENT INDENT "%10s => %s\n",
 					layout_get_name(k),
-					l->keys[i]);
+					l->keys[k]);
 			}
 		}
 	}
