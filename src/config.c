@@ -29,7 +29,6 @@
 #include "udev.h"
 #include "usb.h"
 #include "usb_dump.h"
-#include "x.h"
 
 #define INDENT "    "
 
@@ -54,8 +53,8 @@ static void _print_usage(char **argv)
 {
 	printf("Usage: %s [OPTION]...\n", argv[0]);
 	printf("\n");
-	_print_opt("a GROUP", "authorize=GROUP", "add a udev rule to allow the given group to access the device without root");
-	_print_opt("c DIR", "config-dir=DIR", "directory to use for config files (~/.config/lintartarus)");
+	_print_opt("aGROUP", "authorize=GROUP", "add a udev rule to allow the given group to access the device without root");
+	_print_opt("cDIR", "config-dir=DIR", "directory to use for config files (~/.config/lintartarus)");
 	_print_opt("d", "daemonize", "run in the background as a daemon");
 	_print_opt(NULL, "dump-config", "dump parse config values");
 	_print_opt(NULL, "dump-usb", "dump USB debugging info");
@@ -295,7 +294,7 @@ void cfg_init(int argc, char **argv)
 	int err;
 	gboolean dump_cfg = FALSE;
 	struct option lopts[] = {
-		{ "authorize", required_argument, NULL, 'a' },
+		{ "authorize", optional_argument, NULL, 'a' },
 		{ "config-dir", required_argument, NULL, 'c' },
 		{ "daemonize", no_argument, NULL, 'd' },
 		{ "dump-config", no_argument, NULL, '\1' },
@@ -307,7 +306,7 @@ void cfg_init(int argc, char **argv)
 	memset(&cfg, 0, sizeof(cfg));
 
 	while (1) {
-		char c = getopt_long(argc, argv, "a:c:dh", lopts, NULL);
+		char c = getopt_long(argc, argv, "a::c:dh", lopts, NULL);
 		if (c == -1) {
 			break;
 		}
@@ -520,6 +519,5 @@ void cfg_reload()
 	g_string_free(buff, TRUE);
 	g_string_free(config, TRUE);
 
-	x_sync();
 	usb_sync();
 }

@@ -17,23 +17,24 @@
  */
 
 #pragma once
+#include <glib.h>
 
 /**
- * Get X ready to run
+ * Get uinput ready to run
  */
-void x_init(void);
+void uinput_init(void);
 
 /**
- * Sync key bindings with X
+ * Get uinput's fd to poll on
  */
-void x_sync(void);
+int uinput_fd(void);
 
 /**
- * The X socket has information pending, handle it
+ * Get the corresponding keycode for the given key name
  */
-void x_poll(void);
+int uinput_keycode(const char *name);
 
 /**
- * Get the X socket in use
+ * Execute the given series of keys
  */
-int x_fd(void);
+void uinput_send(const int *codes, const guint codesc);

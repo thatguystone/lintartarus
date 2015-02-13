@@ -18,13 +18,13 @@
 
 #include "config.h"
 #include "poll.h"
+#include "uinput.h"
 #include "usb.h"
-#include "x.h"
 
 int main(int argc, char **argv)
 {
-	x_init();
 	cfg_init(argc, argv);
+	uinput_init();
 	usb_init();
 
 	while (1) {

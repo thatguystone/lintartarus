@@ -77,7 +77,7 @@ char* layout_get_default(const guint i)
 		case 6:  return g_strdup("a");
 		case 7:  return g_strdup("s");
 		case 8:  return g_strdup("d");
-		case 9: return g_strdup("f");
+		case 9:  return g_strdup("f");
 		case 10: return g_strdup("shift");
 		case 11: return g_strdup("z");
 		case 12: return g_strdup("x");

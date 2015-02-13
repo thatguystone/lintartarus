@@ -1,6 +1,6 @@
 SRC = src
 
-PKGS = x11 libusb-1.0 >= 1.0.19 glib-2.0 >= 2.32
+PKGS = libusb-1.0 >= 1.0.19 glib-2.0 >= 2.32
 
 BIN = lintartarus
 OBJECTS = \
@@ -11,9 +11,9 @@ OBJECTS = \
 	$(SRC)/poll.o \
 	$(SRC)/proc.o \
 	$(SRC)/udev.o \
+	$(SRC)/uinput.o \
 	$(SRC)/usb.o \
-	$(SRC)/usb_dump.o \
-	$(SRC)/x.o
+	$(SRC)/usb_dump.o
 
 export CFLAGS = \
 	-c \

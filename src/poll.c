@@ -27,11 +27,10 @@
 #include "config.h"
 #include "poll.h"
 #include "usb.h"
-#include "x.h"
 
 void poll_run()
 {
-	const guint static_events = 2;
+	const guint static_events = 1;
 
 	guint i;
 	int err;
@@ -42,9 +41,6 @@ void poll_run()
 
 	fds[0].fd = cfg_fd();;
 	fds[0].events = POLLIN;
-
-	fds[1].fd = x_fd();
-	fds[1].events = POLLIN;
 
 	for (i = 0; i < usb_fdsc; i++) {
 		fds[static_events + i].fd = usb_fds[i]->fd;
@@ -60,10 +56,6 @@ void poll_run()
 
 	if (fds[0].revents & POLLIN) {
 		cfg_reload();
-	}
-
-	if (fds[1].revents & POLLIN) {
-		x_poll();
 	}
 
 	for (i = 0; i < usb_fdsc; i++) {
