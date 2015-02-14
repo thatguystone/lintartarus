@@ -278,6 +278,12 @@ static void _build_progs(GKeyFile *kf)
 		g_ptr_array_sort(prog->exes, _strcmp);
 		g_ptr_array_sort(prog->layouts, _layout_cmp);
 
+		if (prog->layouts->len > 7) {
+			g_warning("found more than 7 layouts for %s; ignoring the extras",
+				prog->name);
+			g_ptr_array_set_size(prog->layouts, 7);
+		}
+
 		for (next_layout = 1, j = 0; j < prog->layouts->len; j++, next_layout++) {
 			struct layout *l = g_ptr_array_index(prog->layouts, j);
 
