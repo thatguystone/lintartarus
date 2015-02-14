@@ -51,7 +51,6 @@ static void _print_usage(char **argv)
 	printf("\n");
 	_print_opt("aGROUP", "authorize=GROUP", "add a udev rule to allow the given group to access the device without root");
 	_print_opt("cDIR", "config-dir=DIR", "directory to use for config files (~/.config/lintartarus)");
-	_print_opt("d", "daemonize", "run in the background as a daemon");
 	_print_opt(NULL, "dump-config", "dump parse config values");
 	_print_opt("h", "help", "print this message");
 
@@ -453,7 +452,6 @@ void cfg_init(int argc, char **argv)
 	struct option lopts[] = {
 		{ "authorize", optional_argument, NULL, 'a' },
 		{ "config-dir", required_argument, NULL, 'c' },
-		{ "daemonize", no_argument, NULL, 'd' },
 		{ "dump-config", no_argument, NULL, '\1' },
 		{ "help", no_argument, NULL, 'h' },
 		{ NULL, 0, NULL, 0 },
@@ -462,7 +460,7 @@ void cfg_init(int argc, char **argv)
 	memset(&cfg, 0, sizeof(cfg));
 
 	while (1) {
-		char c = getopt_long(argc, argv, "a::c:dh", lopts, NULL);
+		char c = getopt_long(argc, argv, "a::c:h", lopts, NULL);
 		if (c == -1) {
 			break;
 		}
@@ -478,9 +476,6 @@ void cfg_init(int argc, char **argv)
 
 			case 'c':
 				_set_config_dir(optarg);
-				break;
-
-			case 'd':
 				break;
 
 			case 'h':
