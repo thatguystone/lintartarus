@@ -46,6 +46,8 @@ The backlight may be configured with the following values: `off`, `low`, `med`, 
 
 ## Key Maps
 
+The keymaps I use can be found in the `keymaps` directory above.
+
 This is the section you probably care about the most: how do you remap the f'ing keys to something useful in a game? Well, take a gander below:
 
 ```ini
