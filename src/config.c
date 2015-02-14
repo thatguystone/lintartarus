@@ -85,7 +85,7 @@ static void _set_config_dir(const char *dir)
 				break;
 		}
 
-		g_error("invalid config directory: %s\n", strerr);
+		g_error("invalid config directory: %s", strerr);
 	}
 
 	cfg.config_dir = g_strdup(p.we_wordv[0]);
@@ -379,7 +379,7 @@ static void _reload(int fd)
 		}
 	}
 
-	g_string_printf(buff, "%s/%s", cfg.config_dir, "config");
+	g_string_printf(buff, "%s/%s", cfg.config_dir, "config.ini");
 	if (!g_file_test(buff->str, G_FILE_TEST_EXISTS)) {
 		ok = g_file_set_contents(buff->str, DEFAULT_CONFIG, -1, &error);
 		if (!ok) {
@@ -397,7 +397,7 @@ static void _reload(int fd)
 			g_string_append(config, contents);
 			g_free(contents);
 		} else if (error->code != G_FILE_ERROR_NOENT) {
-			g_critical("failed to open config \"%s\": %s\n",
+			g_critical("failed to open config \"%s\": %s",
 				buff->str,
 				error->message);
 		}
@@ -408,7 +408,7 @@ static void _reload(int fd)
 	kf = g_key_file_new();
 	ok = g_key_file_load_from_data(kf, config->str, config->len, 0, &error);
 	if (!ok) {
-		g_critical("failed to parse config: %s\n", error->message);
+		g_critical("failed to parse config: %s", error->message);
 		g_clear_error(&error);
 	}
 
