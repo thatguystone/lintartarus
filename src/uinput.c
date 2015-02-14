@@ -18,386 +18,22 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <glib.h>
 #include <linux/uinput.h>
 #include <string.h>
+#include <sys/inotify.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include "callbacks.h"
+#include "const.h"
+#include "keys.h"
+#include "layout.h"
+#include "poll.h"
 #include "uinput.h"
 
-struct _pair {
-	const char *name;
-	const char *alt_name;
-	int code;
-};
-
-/**
- * All supported keys
- */
-struct _pair _pairs[] = {
-	{	.name = "ESC",
-		.code = 1,
-	},
-	{	.name = "1",
-		.code = 2,
-	},
-	{	.name = "2",
-		.code = 3,
-	},
-	{	.name = "3",
-		.code = 4,
-	},
-	{	.name = "4",
-		.code = 5,
-	},
-	{	.name = "5",
-		.code = 6,
-	},
-	{	.name = "6",
-		.code = 7,
-	},
-	{	.name = "7",
-		.code = 8,
-	},
-	{	.name = "8",
-		.code = 9,
-	},
-	{	.name = "9",
-		.code = 10,
-	},
-	{	.name = "0",
-		.code = 11,
-	},
-	{	.name = "-",
-		.code = 12,
-	},
-	{	.name = "=",
-		.code = 13,
-	},
-	{	.name = "BACKSPACE",
-		.code = 14,
-	},
-	{	.name = "TAB",
-		.code = 15,
-	},
-	{	.name = "Q",
-		.code = 16,
-	},
-	{	.name = "W",
-		.code = 17,
-	},
-	{	.name = "E",
-		.code = 18,
-	},
-	{	.name = "R",
-		.code = 19,
-	},
-	{	.name = "T",
-		.code = 20,
-	},
-	{	.name = "Y",
-		.code = 21,
-	},
-	{	.name = "U",
-		.code = 22,
-	},
-	{	.name = "I",
-		.code = 23,
-	},
-	{	.name = "O",
-		.code = 24,
-	},
-	{	.name = "P",
-		.code = 25,
-	},
-	{	.name = "[",
-		.code = 26,
-	},
-	{	.name = "]",
-		.code = 27,
-	},
-	{	.name = "ENTER",
-		.code = 28,
-	},
-	{	.name = "CTRL_L",
-		.alt_name = "CTRL",
-		.code = 29,
-	},
-	{	.name = "A",
-		.code = 30,
-	},
-	{	.name = "S",
-		.code = 31,
-	},
-	{	.name = "D",
-		.code = 32,
-	},
-	{	.name = "F",
-		.code = 33,
-	},
-	{	.name = "G",
-		.code = 34,
-	},
-	{	.name = "H",
-		.code = 35,
-	},
-	{	.name = "J",
-		.code = 36,
-	},
-	{	.name = "K",
-		.code = 37,
-	},
-	{	.name = "L",
-		.code = 38,
-	},
-	{	.name = ";",
-		.code = 39,
-	},
-	{	.name = "\'",
-		.code = 40,
-	},
-	{	.name = "`",
-		.code = 41,
-	},
-	{	.name = "SHIFT_L",
-		.alt_name = "SHIFT",
-		.code = 42,
-	},
-	{	.name = "\\",
-		.code = 43,
-	},
-	{	.name = "Z",
-		.code = 44,
-	},
-	{	.name = "X",
-		.code = 45,
-	},
-	{	.name = "C",
-		.code = 46,
-	},
-	{	.name = "V",
-		.code = 47,
-	},
-	{	.name = "B",
-		.code = 48,
-	},
-	{	.name = "N",
-		.code = 49,
-	},
-	{	.name = "M",
-		.code = 50,
-	},
-	{	.name = ",",
-		.code = 51,
-	},
-	{	.name = ".",
-		.code = 52,
-	},
-	{	.name = "/",
-		.code = 53,
-	},
-	{	.name = "SHIFT_R",
-		.code = 54,
-	},
-	{	.name = "*",
-		.code = 55,
-	},
-	{	.name = "ALT_L",
-		.alt_name = "ALT",
-		.code = 56,
-	},
-	{	.name = "SPACE",
-		.code = 57,
-	},
-	{	.name = "CAPSLOCK",
-		.code = 58,
-	},
-	{	.name = "F1",
-		.code = 59,
-	},
-	{	.name = "F2",
-		.code = 60,
-	},
-	{	.name = "F3",
-		.code = 61,
-	},
-	{	.name = "F4",
-		.code = 62,
-	},
-	{	.name = "F5",
-		.code = 63,
-	},
-	{	.name = "F6",
-		.code = 64,
-	},
-	{	.name = "F7",
-		.code = 65,
-	},
-	{	.name = "F8",
-		.code = 66,
-	},
-	{	.name = "F9",
-		.code = 67,
-	},
-	{	.name = "F10",
-		.code = 68,
-	},
-	{	.name = "NUMLOCK",
-		.code = 69,
-	},
-	{	.name = "SCROLLLOCK",
-		.code = 70,
-	},
-	{	.name = "KP7",
-		.code = 71,
-	},
-	{	.name = "KP8",
-		.code = 72,
-	},
-	{	.name = "KP9",
-		.code = 73,
-	},
-	{	.name = "KP-",
-		.code = 74,
-	},
-	{	.name = "KP4",
-		.code = 75,
-	},
-	{	.name = "KP5",
-		.code = 76,
-	},
-	{	.name = "KP6",
-		.code = 77,
-	},
-	{	.name = "KP+",
-		.code = 78,
-	},
-	{	.name = "KP1",
-		.code = 79,
-	},
-	{	.name = "KP2",
-		.code = 80,
-	},
-	{	.name = "KP3",
-		.code = 81,
-	},
-	{	.name = "KP0",
-		.code = 82,
-	},
-	{	.name = "KPD.",
-		.code = 83,
-	},
-	{	.name = "F11",
-		.code = 87,
-	},
-	{	.name = "F12",
-		.code = 88,
-	},
-	{	.name = "RO",
-		.code = 89,
-	},
-	{	.name = "KPENTER",
-		.code = 96,
-	},
-	{	.name = "CTRL_R",
-		.code = 97,
-	},
-	{	.name = "KP/",
-		.code = 98,
-	},
-	{	.name = "ALT_R",
-		.code = 100,
-	},
-	{	.name = "HOME",
-		.code = 102,
-	},
-	{	.name = "UP",
-		.code = 103,
-	},
-	{	.name = "PAGEUP",
-		.code = 104,
-	},
-	{	.name = "LEFT",
-		.code = 105,
-	},
-	{	.name = "RIGHT",
-		.code = 106,
-	},
-	{	.name = "END",
-		.code = 107,
-	},
-	{	.name = "DOWN",
-		.code = 108,
-	},
-	{	.name = "PAGEDOWN",
-		.code = 109,
-	},
-	{	.name = "INSERT",
-		.code = 110,
-	},
-	{	.name = "DELETE",
-		.code = 111,
-	},
-	{	.name = "KP=",
-		.code = 117,
-	},
-	{	.name = "KP+-",
-		.code = 118,
-	},
-	{	.name = "PAUSE",
-		.code = 119,
-	},
-	{	.name = "KP,",
-		.code = 121,
-	},
-	{	.name = "SUPER-L",
-		.alt_name = "SUPER",
-		.code = 125,
-	},
-	{	.name = "SUPER-R",
-		.code = 126,
-	},
-	{	.name = "COMPOSE",
-		.code = 127,
-	},
-	{	.name = "F13",
-		.code = 183,
-	},
-	{	.name = "F14",
-		.code = 184,
-	},
-	{	.name = "F15",
-		.code = 185,
-	},
-	{	.name = "F16",
-		.code = 186,
-	},
-	{	.name = "F17",
-		.code = 187,
-	},
-	{	.name = "F18",
-		.code = 188,
-	},
-	{	.name = "F19",
-		.code = 189,
-	},
-	{	.name = "F20",
-		.code = 190,
-	},
-	{	.name = "F21",
-		.code = 191,
-	},
-	{	.name = "F22",
-		.code = 192,
-	},
-	{	.name = "F23",
-		.code = 193,
-	},
-	{	.name = "F24",
-		.code = 194,
-	},
-};
+#define INPUT_DIR "/dev/input"
 
 static const char *_uinput_paths[] = {
 	"/dev/uinput",
@@ -410,11 +46,183 @@ static const char *_uinput_paths[] = {
  */
 static int _out;
 
+/**
+ * Inotify fd for watching for device changes
+ */
+static int _ifd;
+
+/**
+ * All FDs to watch for events
+ */
+static GArray *_fds;
+
+static void _dev_close(void *fd_)
+{
+	int *fd = fd_;
+	ioctl(*fd, EVIOCGRAB, 0);
+	close(*fd);
+	poll_rm(*fd);
+}
+
+static void _send_syn(void)
+{
+	int err;
+	struct input_event ev = {
+		.type = EV_SYN,
+	};
+
+	err = write(_out, &ev, sizeof(ev));
+	if (err != sizeof(ev)) {
+		g_error("failed to send EV_SYN: %s", strerror(errno));
+	}
+}
+
+static void _handle_code(int code, int value)
+{
+	int err;
+	struct input_event ev = {
+		.type = EV_KEY,
+		.value = value,
+		.code = code,
+	};
+
+	if (code < 0) {
+		layout_handle_internal(code);
+	} else {
+		err = write(_out, &ev, sizeof(ev));
+		if (err != sizeof(ev)) {
+			g_error("failed to send key code %d: %s", code, strerror(errno));
+		}
+
+		_send_syn();
+	}
+}
+
+static void _event(int fd)
+{
+	guint i;
+	guint j;
+	ssize_t err;
+	GArray *seq;
+	struct input_event ev;
+	const GPtrArray *combo;
+
+	err = read(fd, &ev, sizeof(ev));
+	if (err != sizeof(ev)) {
+		if (err != -1) {
+			g_critical("did not get complete input event: "
+				"%" G_GSSIZE_FORMAT " != %" G_GSSIZE_FORMAT,
+				err,
+				sizeof(ev));
+		}
+
+		return;
+	}
+
+	if (ev.type != EV_KEY) {
+		return;
+	}
+
+	combo = layout_translate(ev.code);
+	if (combo == NULL) {
+		return;
+	}
+
+	g_debug("got combo");
+
+	/*
+	 * If there's only 1 combo, fire it in step with the key press from the
+	 * device. If there's more than 1, fire the combo and ignore keyup.
+	 */
+	if (combo->len == 1) {
+		seq = g_ptr_array_index(combo, 0);
+		for (i = 0; i < seq->len; i++) {
+			_handle_code(g_array_index(seq, int, i), ev.value);
+		}
+	} else if (ev.value == 1) {
+		for (i = 0; i < combo->len; i++) {
+			seq = g_ptr_array_index(combo, i);
+
+			// Send key down
+			for (j = 0; j < seq->len; j++) {
+				_handle_code(g_array_index(seq, int, i), 1);
+			}
+
+			// Send key up
+			for (j = 0; j < seq->len; j++) {
+				_handle_code(g_array_index(seq, int, i), 0);
+			}
+		}
+	}
+}
+
+static void _sync_devs(int fd)
+{
+	int err;
+	GDir *dir;
+	const char *path;
+	char ifdbuf[1024];
+	struct input_id info;
+	GString *buff = g_string_new("");
+
+	g_array_set_size(_fds, 0);
+
+	// Don't care about what happened, just that something did
+	while (read(fd, ifdbuf, sizeof(ifdbuf)) > 0);
+
+	dir = g_dir_open(INPUT_DIR, 0, NULL);
+	while ((path = g_dir_read_name(dir))) {
+		g_string_printf(buff, "%s/%s", INPUT_DIR, path);
+		if (g_file_test(buff->str, G_FILE_TEST_IS_DIR)) {
+			continue;
+		}
+
+		fd = open(buff->str, O_RDONLY);
+		if (fd == -1) {
+			goto end;
+		}
+
+		err = ioctl(fd, EVIOCGID, &info);
+		if (err == -1) {
+			goto end;
+		}
+
+		if (info.vendor != VENDOR || info.product != PRODUCT) {
+			goto end;
+		}
+
+		err = ioctl(fd, EVIOCGRAB, 1);
+		if (err == -1) {
+			goto end;
+		}
+
+		err = fcntl(fd, F_SETFL, O_NONBLOCK);
+		if (err == -1) {
+			goto end;
+		}
+
+		poll_mod(fd, _event, TRUE, FALSE);
+		g_array_append_val(_fds, fd);
+		continue;
+
+end:
+		if (fd != -1) {
+			close(fd);
+		}
+	}
+
+	g_string_free(buff, TRUE);
+	g_dir_close(dir);
+}
+
 void uinput_init(void)
 {
-	uint i;
 	int fd;
+	int ifd;
 	int err;
+	guint i;
+	int code;
+	GArray *codes = keys_get_all_codes();
 	struct uinput_user_dev uidev = {
 		.name = "lintartarus keyboard",
 		.id = {
@@ -424,6 +232,9 @@ void uinput_init(void)
 			.version = 1,
 		},
 	};
+
+	_fds = g_array_new(FALSE, FALSE, sizeof(int));
+	g_array_set_clear_func(_fds, _dev_close);
 
 	fd = -1;
 	for (i = 0; fd == -1 && i < G_N_ELEMENTS(_uinput_paths); i++) {
@@ -449,14 +260,28 @@ void uinput_init(void)
 		g_error("failed to setup uinput keyboard: %s", strerror(errno));
 	}
 
-	for (i = 0; i < G_N_ELEMENTS(_pairs); i++) {
-		err = ioctl(fd, UI_SET_KEYBIT, _pairs[i].code);
+	err = ioctl(fd, UI_SET_EVBIT, EV_SYN);
+	if (err == -1) {
+		g_error("failed to setup uinput keyboard: %s", strerror(errno));
+	}
+
+	for (i = 0; i < codes->len; i++) {
+		code = g_array_index(codes, int, i);
+
+		// Internal code, can't be fired
+		if (code < 0) {
+			continue;
+		}
+
+		err = ioctl(fd, UI_SET_KEYBIT, code);
 		if (err == -1) {
 			g_error("failed to setup key %s: %s",
-				_pairs[i].name,
+				keys_val(code),
 				strerror(errno));
 		}
 	}
+
+	g_array_free(codes, TRUE);
 
 	err = ioctl(fd, UI_DEV_CREATE);
 	if (err == -1) {
@@ -465,30 +290,18 @@ void uinput_init(void)
 
 	_out = fd;
 
-	while (TRUE) {
-		struct input_event ev = {
-			.type = EV_KEY,
-			.code = _pairs[88].code,
-			.value = 1,
-		};
-
-		write(_out, &ev, sizeof(ev));
-		usleep(100);
-
-		ev.value = 0;
-		write(_out, &ev, sizeof(ev));
-
-		usleep(1000 * 100);
+	ifd = inotify_init1(IN_NONBLOCK);
+	if (_ifd == -1) {
+		g_error("failed to create inotify input instance: %s",
+			strerror(errno));
 	}
 
-	// fd = open("/dev/input/event21", O_RDWR);
-	// ioctl(fd, EVIOCGRAB, 1);
+	err = inotify_add_watch(ifd, INPUT_DIR, IN_CREATE | IN_DELETE | IN_ATTRIB);
+	if (err == -1) {
+		g_error("failed to watch input directory: %s",
+			strerror(errno));
+	}
 
-	// fd = open("/dev/input/event22", O_RDWR);
-	// ioctl(fd, EVIOCGRAB, 1);
-
-	// fd = open("/dev/input/event23", O_RDWR);
-	// ioctl(fd, EVIOCGRAB, 1);
-
-	// while (1);
+	poll_mod(ifd, _sync_devs, TRUE, FALSE);
+	_sync_devs(ifd);
 }

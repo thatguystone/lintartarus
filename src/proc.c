@@ -16,20 +16,35 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <errno.h>
 #include <glib.h>
-#include <stdio.h>
 #include <string.h>
+#include "callbacks.h"
 #include "config.h"
 #include "proc.h"
+#include "state.h"
 
-static void _set_active(const guint progi)
+static void _set_active(const int progi, const pid_t pid)
 {
-	struct program *prog = g_ptr_array_index(cfg.programs, progi);
+	if (progi == -1) {
+		if (state.progi != -1) {
+			g_debug("active program exited");
+		}
+	} else {
+		struct program *prog = g_ptr_array_index(cfg.programs, progi);
+		g_debug("setting active program to %s", prog->name);
+	}
 
-	printf("%s\n", prog->name);
+	state_set_prog(progi, pid);
+
+	if (progi == -1) {
+		cbs_prog_end();
+	} else {
+		cbs_prog_start();
+	}
 }
 
-static gboolean _check_cmd(const char *cmd)
+static gboolean _check_cmd(const char *cmd, const pid_t pid)
 {
 	guint i;
 	guint j;
@@ -42,7 +57,7 @@ static gboolean _check_cmd(const char *cmd)
 		for (j = 0; j < prog->cmds->len; j++) {
 			patt = g_ptr_array_index(prog->cmds, j);
 			if (strstr(cmd, patt) != NULL) {
-				_set_active(j);
+				_set_active(i, pid);
 				return TRUE;
 			}
 		}
@@ -51,7 +66,7 @@ static gboolean _check_cmd(const char *cmd)
 	return FALSE;
 }
 
-static gboolean _check_exec(const char *exe)
+static gboolean _check_exec(const char *exe, const pid_t pid)
 {
 	guint i;
 	guint j;
@@ -72,7 +87,7 @@ static gboolean _check_exec(const char *exe)
 			}
 
 			if (match) {
-				_set_active(j);
+				_set_active(i, pid);
 				return TRUE;
 			}
 		}
@@ -81,7 +96,8 @@ static gboolean _check_exec(const char *exe)
 	return FALSE;
 }
 
-void proc_sync()
+
+static void _check_active(void)
 {
 	GDir *dir;
 	char *end;
@@ -89,6 +105,7 @@ void proc_sync()
 	gboolean ok;
 	char *contents;
 	const char *path;
+	gboolean running = FALSE;
 	GString *buff = g_string_new("");
 	GError *error = NULL;
 
@@ -103,7 +120,8 @@ void proc_sync()
 
 		g_string_printf(buff, "/proc/%d/cmdline", pid);
 		ok = g_file_get_contents(buff->str, &contents, NULL, &error);
-		if (ok && _check_cmd(contents)) {
+		if (ok && _check_cmd(contents, pid)) {
+			running = TRUE;
 			break;
 		}
 
@@ -112,7 +130,8 @@ void proc_sync()
 
 		g_string_printf(buff, "/proc/%d/exe", pid);
 		contents = g_file_read_link(buff->str, NULL);
-		if (contents != NULL && _check_exec(contents)) {
+		if (contents != NULL && _check_exec(contents, pid)) {
+			running = TRUE;
 			break;
 		}
 
@@ -120,7 +139,30 @@ void proc_sync()
 		contents = NULL;
 	}
 
+	if (!running) {
+		_set_active(-1, -1);
+	}
+
 	g_free(contents);
 	g_string_free(buff, TRUE);
 	g_dir_close(dir);
+}
+
+void proc_on_poll_tick()
+{
+	int err;
+
+	if (state.progi == -1) {
+		_check_active();
+	} else {
+		err = kill(state.prog_pid, 0);
+		if (err == -1 && errno == ESRCH) {
+			_set_active(-1, -1);
+		}
+	}
+}
+
+void proc_on_config_updated()
+{
+	_check_active();
 }

@@ -25,16 +25,6 @@
 void uinput_init(void);
 
 /**
- * Get uinput's fd to poll on
- */
-int uinput_fd(void);
-
-/**
- * Get the corresponding keycode for the given key name
- */
-int uinput_keycode(const char *name);
-
-/**
  * Execute the given series of keys
  */
-void uinput_send(const int *codes, const guint codesc);
+void uinput_send(GPtrArray *combo);

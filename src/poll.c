@@ -18,51 +18,83 @@
 
 #include <errno.h>
 #include <glib.h>
-#include <libusb.h>
-#include <poll.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include "config.h"
+#include <sys/epoll.h>
+#include "callbacks.h"
 #include "poll.h"
-#include "usb.h"
+
+static int _epoll;
+static GHashTable *_cbs;
+
+void poll_init()
+{
+	_cbs = g_hash_table_new(NULL, NULL);
+	_epoll = epoll_create1(0);
+	if (_epoll == -1) {
+		g_error("failed to init epoll: %s", strerror(errno));
+	}
+}
+
+void poll_mod(int fd, poll_cb cb, gboolean read, gboolean write)
+{
+	int err;
+	struct epoll_event ev = {
+		.events = 0,
+		.data.fd = fd,
+	};
+
+	if (read) {
+		ev.events |= EPOLLIN;
+	}
+
+	if (write) {
+		ev.events |= EPOLLOUT;
+	}
+
+	if (!g_hash_table_contains(_cbs, GINT_TO_POINTER(fd))) {
+		err = epoll_ctl(_epoll, EPOLL_CTL_ADD, fd, &ev);
+		if (err == -1) {
+			g_error("failed to add to epoll: %s", strerror(errno));
+		}
+	} else {
+		err = epoll_ctl(_epoll, EPOLL_CTL_MOD, fd, &ev);
+		if (err == -1) {
+			g_error("failed to mod event: %s", strerror(errno));
+		}
+	}
+
+	// Allow cb to be changed
+	g_hash_table_insert(_cbs, GINT_TO_POINTER(fd), cb);
+}
+
+void poll_rm(int fd)
+{
+	g_hash_table_remove(_cbs, GINT_TO_POINTER(fd));
+	epoll_ctl(_epoll, EPOLL_CTL_DEL, fd, NULL);
+}
 
 void poll_run()
 {
-	const guint static_events = 1;
-
-	guint i;
+	int i;
+	int fd;
 	int err;
-	guint usb_fdsc;
-	gboolean poll_usb = FALSE;
-	const struct libusb_pollfd **usb_fds = usb_get_pollfds(&usb_fdsc);
-	struct pollfd fds[static_events + usb_fdsc];
+	poll_cb cb;
+	struct epoll_event evs[8];
 
-	fds[0].fd = cfg_fd();;
-	fds[0].events = POLLIN;
+	g_debug("poll running...");
 
-	for (i = 0; i < usb_fdsc; i++) {
-		fds[static_events + i].fd = usb_fds[i]->fd;
-		fds[static_events + i].events = usb_fds[i]->events;
-	}
+	while (TRUE) {
+		err = epoll_wait(_epoll, evs, G_N_ELEMENTS(evs), 1000);
 
-	free(usb_fds);
+		for (i = 0; i < err; i++) {
+			fd = evs[i].data.fd;
+			cb = g_hash_table_lookup(_cbs, GINT_TO_POINTER(fd));
+			if (cb != NULL) {
+				cb(fd);
+			}
+		}
 
-	err = poll(fds, G_N_ELEMENTS(fds), -1);
-	if (err == -1) {
-		return;
-	}
-
-	if (fds[0].revents & POLLIN) {
-		cfg_reload();
-	}
-
-	for (i = 0; i < usb_fdsc; i++) {
-		poll_usb |= fds[static_events + i].revents != 0;
-	}
-
-	if (poll_usb) {
-		usb_async_poll();
+		cbs_poll_tick();
 	}
 }

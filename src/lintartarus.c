@@ -19,17 +19,21 @@
 #include "config.h"
 #include "poll.h"
 #include "uinput.h"
-#include "usb.h"
+#include "state.h"
+// #include "usb.h"
 
 int main(int argc, char **argv)
 {
+	state_init();
+	poll_init();
+
+	layout_init();
+
 	cfg_init(argc, argv);
+
 	uinput_init();
 	usb_init();
+	poll_run();
 
-	while (1) {
-		poll_run();
-	}
-
-	return 0;
+	return 1;
 }

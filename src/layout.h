@@ -20,37 +20,31 @@
 #include <glib.h>
 
 /**
- * A layout for the tartarus
+ * Basic layout init
  */
-struct layout {
-	/**
-	 * ID specified in config file
-	 */
-	guint id;
-
-	/**
-	 * Kep mapping
-	 */
-	char *keys[15 + 4 + 2];
-};
+void layout_init(void);
 
 /**
- * Advance to the next layout for the active program
+ * Trigger the event corresponding to the given code
  */
-void layout_next(void);
+const GPtrArray* layout_translate(int code);
 
 /**
- * Step back to the previous layout for the active program
+ * Handle an internal command for the layout
  */
-void layout_prev(void);
+void layout_handle_internal(int code);
 
 /**
- * Get the name of the key, as printed on the device.
+ * Handle config changes
  */
-const char* layout_get_name(const guint i);
+void layout_on_config_updated(void);
 
 /**
- * Get the default key for the pad at the given index. Free it when you're
- * done.
+ * A program started
  */
-char* layout_get_default(const guint i);
+void layout_on_prog_start(void);
+
+/**
+ * A program ended
+ */
+void layout_on_prog_end(void);

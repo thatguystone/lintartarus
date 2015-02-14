@@ -17,13 +17,50 @@
  */
 
 #pragma once
+#include <glib.h>
+#include <sys/types.h>
 
 /**
- * Check to see if the program exited
+ * Global state that everyone can mutilate
  */
-void proc_on_poll_tick(void);
+struct state {
+	/**
+	 * Index of the currently-running program. -1 if none are running.
+	 */
+	int progi;
+
+	/**
+	 * PID of the currently-running program
+	 */
+	pid_t prog_pid;
+
+	/**
+	 * Number of the current layout in use. 0 if no layout is in use.
+	 */
+	guint layout;
+};
 
 /**
- * Config was updated. Check to see if anything changed.
+ * Globally-usable variable
  */
-void proc_on_config_updated(void);
+struct state state;
+
+/**
+ * Yet another basic setup
+ */
+void state_init(void);
+
+/**
+ * Check if there have been any state changes
+ */
+gboolean state_has_changed(void);
+
+/**
+ * Set the global layout
+ */
+void state_set_layout(guint layout);
+
+/**
+ * Set the current running program
+ */
+void state_set_prog(int progi, pid_t pid);

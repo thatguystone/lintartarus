@@ -16,14 +16,55 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#include "callbacks.h"
+#include "layout.h"
+#include "proc.h"
+#include "state.h"
+#include "usb.h"
 
-/**
- * Check to see if the program exited
- */
-void proc_on_poll_tick(void);
+static void _state_changed(void)
+{
+	usb_on_state_changed();
+}
 
-/**
- * Config was updated. Check to see if anything changed.
- */
-void proc_on_config_updated(void);
+void cbs_poll_tick()
+{
+	proc_on_poll_tick();
+	usb_on_poll_tick();
+
+	cbs_check_state();
+}
+
+void cbs_config_updated()
+{
+	proc_on_config_updated();
+	layout_on_config_updated();
+
+	// Ignore current state, possible for config to have changed things, so
+	// sync anyway
+	state_has_changed();
+	_state_changed();
+}
+
+void cbs_prog_start()
+{
+	layout_on_prog_start();
+
+	cbs_check_state();
+}
+
+void cbs_prog_end()
+{
+	layout_on_prog_end();
+
+	cbs_check_state();
+}
+
+void cbs_check_state()
+{
+	if (!state_has_changed()) {
+		return;
+	}
+
+	_state_changed();
+}

@@ -26,10 +26,22 @@
 #define DEFAULT_CONFIG \
 	"[default]\n" \
 	"pulse = false\n" \
-	"brightness = low\n" \
-	"launch = ctrl+alt+shift+l\n" \
-	"next-layout = ctrl+alt+shift+n\n" \
-	"prev-layout = ctrl+alt+shift+p\n"
+	"brightness = low\n"
+
+/**
+ * A layout for the tartarus
+ */
+struct layout {
+	/**
+	 * ID specified in config file
+	 */
+	guint id;
+
+	/**
+	 * Kep mapping
+	 */
+	GPtrArray *combos[15 + 4 + 2];
+};
 
 /**
  * A configured program, complete with layouts and everything!
@@ -59,18 +71,10 @@ struct program {
 /**
  * Configuration options
  */
-struct config{
+struct config {
 	char *config_dir;
 
-	int layout;
-
 	GPtrArray *programs;
-
-	struct {
-		char *launch;
-		char *next;
-		char *prev;
-	} hotkeys;
 
 	struct {
 		int pulse;
@@ -87,18 +91,3 @@ struct config cfg;
  * Setup global config
  */
 void cfg_init(int argc, char **argv);
-
-/**
- * Dump out parsed config values
- */
-void cfg_dump(void);
-
-/**
- * Get fd to poll on
- */
-int cfg_fd(void);
-
-/**
- * Reload configuration files
- */
-void cfg_reload(void);

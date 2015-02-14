@@ -19,11 +19,31 @@
 #pragma once
 
 /**
- * Check to see if the program exited
+ * Poll completed a round, do some busy work
  */
-void proc_on_poll_tick(void);
+void cbs_poll_tick(void);
 
 /**
- * Config was updated. Check to see if anything changed.
+ * Notification of a configuration update
  */
-void proc_on_config_updated(void);
+void cbs_config_updated(void);
+
+/**
+ * A new program started
+ */
+void cbs_prog_start(void);
+
+/**
+ * A program ended
+ */
+void cbs_prog_end(void);
+
+/**
+ * Notification of a state change
+ */
+void cbs_state_changed(void);
+
+/**
+ * Change was (maybe?) updated
+ */
+void cbs_check_state(void);

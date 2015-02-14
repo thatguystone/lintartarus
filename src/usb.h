@@ -35,19 +35,14 @@ enum usb_brightness {
 void usb_init(void);
 
 /**
- * Get the any pollfds that need to be waited on
+ * State changed. Update device.
  */
-const struct libusb_pollfd** usb_get_pollfds(guint *fdsc);
+void usb_on_state_changed(void);
 
 /**
- * Polling interface says sockets are ready
+ * Just check USB state
  */
-void usb_async_poll(void);
-
-/**
- * Sync settings to the device
- */
-void usb_sync(void);
+void usb_on_poll_tick(void);
 
 /**
  * Print a USB error to stderr

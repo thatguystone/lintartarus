@@ -25,17 +25,13 @@
 #include <sys/inotify.h>
 #include <unistd.h>
 #include <wordexp.h>
+#include "callbacks.h"
 #include "config.h"
+#include "keys.h"
+#include "poll.h"
 #include "udev.h"
-#include "usb.h"
-#include "usb_dump.h"
 
 #define INDENT "    "
-
-/**
- * Inotify fd for watching for config changes
- */
-static int _ifd;
 
 static void _print_opt(const char *s, const char *arg, const char *desc)
 {
@@ -57,7 +53,6 @@ static void _print_usage(char **argv)
 	_print_opt("cDIR", "config-dir=DIR", "directory to use for config files (~/.config/lintartarus)");
 	_print_opt("d", "daemonize", "run in the background as a daemon");
 	_print_opt(NULL, "dump-config", "dump parse config values");
-	_print_opt(NULL, "dump-usb", "dump USB debugging info");
 	_print_opt("h", "help", "print this message");
 
 	exit(2);
@@ -97,19 +92,6 @@ static void _set_config_dir(const char *dir)
 	wordfree(&p);
 }
 
-static void _key_layout(
-	GKeyFile *f,
-	const char *key,
-	char **to,
-	const char *def)
-{
-	g_free(*to);
-	*to = g_key_file_get_string(f, "default", key, NULL);
-	if (*to == NULL) {
-		*to = g_strdup(def);
-	}
-}
-
 static int _strcmp(const void *a_, const void *b_)
 {
 	const char * const *a = a_;
@@ -122,8 +104,8 @@ static void _layout_free(void *l_)
 	guint i;
 	struct layout *l = l_;
 
-	for (i = 0; i < G_N_ELEMENTS(l->keys); i++) {
-		g_free(l->keys[i]);
+	for (i = 0; i < G_N_ELEMENTS(l->combos); i++) {
+		g_ptr_array_free(l->combos[i], TRUE);
 	}
 
 	g_free(l);
@@ -134,8 +116,10 @@ static struct layout* _layout_new(void)
 	guint i;
 	struct layout *l = g_malloc0(sizeof(*l));
 
-	for (i = 0; i < G_N_ELEMENTS(l->keys); i++) {
-		l->keys[i] = layout_get_default(i);
+	for (i = 0; i < G_N_ELEMENTS(l->combos); i++) {
+		if (!keys_parse(keys_get_dev_default(i), &l->combos[i])) {
+			g_error("default layout parsing failed. this is a programmer bug.");
+		}
 	}
 
 	return l;
@@ -218,11 +202,16 @@ static void _parse_layout(
 	l = _layout_new();
 	l->id = id;
 
-	for (i = 0; i < G_N_ELEMENTS(l->keys); i++) {
-		val = g_key_file_get_string(kf, group_name, layout_get_name(i), NULL);
+	for (i = 0; i < G_N_ELEMENTS(l->combos); i++) {
+		val = g_key_file_get_string(
+			kf, group_name,
+			keys_get_dev_name(i), NULL);
 		if (val != NULL) {
-			g_free(l->keys[i]);
-			l->keys[i] = val;
+			GPtrArray *nl;
+			if (keys_parse(val, &nl)) {
+				g_ptr_array_free(l->combos[i], TRUE);
+				l->combos[i] = nl;
+			}
 		}
 	}
 
@@ -289,76 +278,6 @@ static void _build_progs(GKeyFile *kf)
 	}
 }
 
-void cfg_init(int argc, char **argv)
-{
-	int err;
-	gboolean dump_cfg = FALSE;
-	struct option lopts[] = {
-		{ "authorize", optional_argument, NULL, 'a' },
-		{ "config-dir", required_argument, NULL, 'c' },
-		{ "daemonize", no_argument, NULL, 'd' },
-		{ "dump-config", no_argument, NULL, '\1' },
-		{ "dump-usb", no_argument, NULL, '\2' },
-		{ "help", no_argument, NULL, 'h' },
-		{ NULL, 0, NULL, 0 },
-	};
-
-	memset(&cfg, 0, sizeof(cfg));
-
-	while (1) {
-		char c = getopt_long(argc, argv, "a::c:dh", lopts, NULL);
-		if (c == -1) {
-			break;
-		}
-
-		switch (c) {
-			case '\1':
-				dump_cfg = TRUE;
-				break;
-
-			case '\2':
-				usb_dump();
-				exit(0);
-				break;
-
-			case 'a':
-				udev_authorize(optarg);
-				break;
-
-			case 'c':
-				_set_config_dir(optarg);
-				break;
-
-			case 'd':
-				break;
-
-			case 'h':
-			default:
-				_print_usage(argv);
-		}
-	}
-
-	if (cfg.config_dir == NULL) {
-		_set_config_dir("~/.config/lintartarus");
-	}
-
-	_ifd = inotify_init1(IN_NONBLOCK);
-	if (_ifd == -1) {
-		g_error("failed to create inotify instance: %s", strerror(errno));
-	}
-
-	cfg_reload();
-
-	err = inotify_add_watch(_ifd, cfg.config_dir, IN_CLOSE_WRITE | IN_MOVED_TO);
-	if (err == -1) {
-		g_error("failed to watch config directory: %s", strerror(errno));
-	}
-
-	if (dump_cfg) {
-		cfg_dump();
-		exit(0);
-	}
-}
 
 static const char* _brightness_str(int brightness)
 {
@@ -371,7 +290,7 @@ static const char* _brightness_str(int brightness)
 	}
 }
 
-void cfg_dump(void)
+static void _dump(void)
 {
 	guint i;
 	guint j;
@@ -380,11 +299,6 @@ void cfg_dump(void)
 	printf("config dir: %s\n", cfg.config_dir);
 	printf("pulse: %s\n", cfg.usb.pulse ? "true" : "false");
 	printf("brightness: %s\n", _brightness_str(cfg.usb.brightness));
-	printf("\n");
-	printf("hotkeys:\n");
-	printf(INDENT "launch:      %s\n", cfg.hotkeys.launch);
-	printf(INDENT "next-layout: %s\n", cfg.hotkeys.next);
-	printf(INDENT "prev-layout: %s\n", cfg.hotkeys.prev);
 	printf("\n");
 	printf("programs (%u):\n", cfg.programs->len);
 
@@ -412,10 +326,12 @@ void cfg_dump(void)
 
 			printf(INDENT INDENT "layout %u:\n", j + 1);
 
-			for (k = 0; k < G_N_ELEMENTS(l->keys); k++) {
+			for (k = 0; k < G_N_ELEMENTS(l->combos); k++) {
+				char *combo = keys_dump(l->combos[k]);
 				printf(INDENT INDENT INDENT "%10s => %s\n",
-					layout_get_name(k),
-					l->keys[k]);
+					keys_get_dev_name(k),
+					combo);
+				g_free(combo);
 			}
 		}
 	}
@@ -423,12 +339,7 @@ void cfg_dump(void)
 	printf("\n");
 }
 
-int cfg_fd()
-{
-	return _ifd;
-}
-
-void cfg_reload()
+static void _reload(int fd)
 {
 	int err;
 	GDir *dir;
@@ -443,7 +354,9 @@ void cfg_reload()
 	GString *config = g_string_new("");
 
 	// Don't care about what happened, just that something did
-	while (read(_ifd, ifdbuf, sizeof(ifdbuf)) > 0);
+	while (read(fd, ifdbuf, sizeof(ifdbuf)) > 0);
+
+	g_debug("config change detected, reloading...");
 
 	if (!g_file_test(cfg.config_dir, G_FILE_TEST_IS_DIR)) {
 		err = g_mkdir_with_parents(cfg.config_dir, 0700);
@@ -507,10 +420,6 @@ void cfg_reload()
 		g_critical("invalid brightness config, defaulting to low");
 	}
 
-	_key_layout(kf, "launch", &cfg.hotkeys.launch, "ctrl+alt+shift+l");
-	_key_layout(kf, "next-layout", &cfg.hotkeys.next, "ctrl+alt+shift+n");
-	_key_layout(kf, "prev-layout", &cfg.hotkeys.prev, "ctrl+alt+shift+p");
-
 	_build_progs(kf);
 
 	g_free(brightness);
@@ -519,5 +428,74 @@ void cfg_reload()
 	g_string_free(buff, TRUE);
 	g_string_free(config, TRUE);
 
-	usb_sync();
+	cbs_config_updated();
+}
+
+void cfg_init(int argc, char **argv)
+{
+	int ifd;
+	int err;
+	gboolean dump_cfg = FALSE;
+	struct option lopts[] = {
+		{ "authorize", optional_argument, NULL, 'a' },
+		{ "config-dir", required_argument, NULL, 'c' },
+		{ "daemonize", no_argument, NULL, 'd' },
+		{ "dump-config", no_argument, NULL, '\1' },
+		{ "help", no_argument, NULL, 'h' },
+		{ NULL, 0, NULL, 0 },
+	};
+
+	memset(&cfg, 0, sizeof(cfg));
+
+	while (1) {
+		char c = getopt_long(argc, argv, "a::c:dh", lopts, NULL);
+		if (c == -1) {
+			break;
+		}
+
+		switch (c) {
+			case '\1':
+				dump_cfg = TRUE;
+				break;
+
+			case 'a':
+				udev_authorize(optarg);
+				break;
+
+			case 'c':
+				_set_config_dir(optarg);
+				break;
+
+			case 'd':
+				break;
+
+			case 'h':
+			default:
+				_print_usage(argv);
+		}
+	}
+
+	if (cfg.config_dir == NULL) {
+		_set_config_dir("~/.config/lintartarus");
+	}
+
+	ifd = inotify_init1(IN_NONBLOCK);
+	if (ifd == -1) {
+		g_error("failed to create inotify instance: %s", strerror(errno));
+	}
+
+	err = inotify_add_watch(ifd,
+		cfg.config_dir,
+		IN_CLOSE_WRITE | IN_MOVED_TO);
+	if (err == -1) {
+		g_error("failed to watch config directory: %s", strerror(errno));
+	}
+
+	poll_mod(ifd, _reload, TRUE, FALSE);
+	_reload(ifd);
+
+	if (dump_cfg) {
+		_dump();
+		exit(0);
+	}
 }

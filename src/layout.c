@@ -16,85 +16,103 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
+#include "callbacks.h"
+#include "config.h"
 #include "layout.h"
+#include "keys.h"
+#include "state.h"
 
-void layout_next()
+/**
+ * Keycodes for input values, living at their index in layout.keys
+ */
+static int _mapping[G_N_ELEMENTS(((struct layout*)(NULL))->combos)];
+
+void layout_init()
 {
-	printf("layout_next\n");
-}
+	guint i;
 
-void layout_prev()
-{
-	printf("layout_prev\n");
-}
-
-const char* layout_get_name(const guint i)
-{
-	switch (i) {
-		// Keypad
-		case 0:  return "1";
-		case 1:  return "2";
-		case 2:  return "3";
-		case 3:  return "4";
-		case 4:  return "5";
-		case 5:  return "6";
-		case 6:  return "7";
-		case 7:  return "8";
-		case 8:  return "9";
-		case 9:  return "10";
-		case 10: return "11";
-		case 11: return "12";
-		case 12: return "13";
-		case 13: return "14";
-		case 14: return "15";
-
-		// Arrows
-		case 15: return "up";
-		case 16: return "down";
-		case 17: return "left";
-		case 18: return "right";
-
-		// Thumb buttons
-		case 19: return "thumb_up";
-		case 20: return "thumb_down";
-
-		// Or you fucked up
-		default: g_error("key %u doesn't exist. moron.", i);
+	for (i = 0; i < G_N_ELEMENTS(_mapping); i++) {
+		_mapping[i] = keys_code(keys_get_dev_default(i));
 	}
 }
 
-char* layout_get_default(const guint i)
+const GPtrArray* layout_translate(int code)
 {
-	switch (i) {
-		// Keypad
-		case 0:  return g_strdup("tab");
-		case 1:  return g_strdup("q");
-		case 2:  return g_strdup("w");
-		case 3:  return g_strdup("e");
-		case 4:  return g_strdup("r");
-		case 5:  return g_strdup("capslock");
-		case 6:  return g_strdup("a");
-		case 7:  return g_strdup("s");
-		case 8:  return g_strdup("d");
-		case 9:  return g_strdup("f");
-		case 10: return g_strdup("shift");
-		case 11: return g_strdup("z");
-		case 12: return g_strdup("x");
-		case 13: return g_strdup("c");
-		case 14: return g_strdup("v");
+	guint i;
+	gboolean found;
+	struct layout *layout;
+	struct program *program;
 
-		// Arrows
-		case 15: return g_strdup("up");
-		case 16: return g_strdup("down");
-		case 17: return g_strdup("left");
-		case 18: return g_strdup("right");
-
-		// Thumb buttons
-		case 19: return g_strdup("alt");
-		case 20: return g_strdup("space");
-
-		// Or you fucked up
-		default: g_error("key %u doesn't exist. moron.", i);
+	if (state.layout == 0) {
+		return NULL;
 	}
+
+	found = FALSE;
+	for (i = 0; i < G_N_ELEMENTS(_mapping); i++) {
+		if (_mapping[i] == code) {
+			found = TRUE;
+			break;
+		}
+	}
+
+	if (!found) {
+		return NULL;
+	}
+
+	program = g_ptr_array_index(cfg.programs, state.progi);
+	layout = g_ptr_array_index(program->layouts, state.layout - 1);
+
+	return layout->combos[i];
+}
+
+void layout_handle_internal(int code)
+{
+	guint layout = state.layout;
+	struct program *program = g_ptr_array_index(cfg.programs, state.progi);
+
+	switch (code) {
+		case KEY_NEXT_LAYOUT:
+			if (layout == program->layouts->len) {
+				layout = 1;
+			} else {
+				layout++;
+			}
+			break;
+
+		case KEY_PREV_LAYOUT:
+			if (layout == 1) {
+				layout = program->layouts->len;
+			} else {
+				layout--;
+			}
+			break;
+	}
+
+	state_set_layout(layout);
+	cbs_check_state();
+}
+
+void layout_on_config_updated()
+{
+	struct program *program;
+
+	if (state.layout == 0) {
+		return;
+	}
+
+	program = g_ptr_array_index(cfg.programs, state.progi);
+
+	state_set_layout(MIN(state.layout, program->layouts->len));
+}
+
+void layout_on_prog_start()
+{
+	if (state.layout == 0) {
+		state_set_layout(1);
+	}
+}
+
+void layout_on_prog_end()
+{
+	state_set_layout(0);
 }

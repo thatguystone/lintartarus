@@ -4,20 +4,23 @@ PKGS = libusb-1.0 >= 1.0.19 glib-2.0 >= 2.32
 
 BIN = lintartarus
 OBJECTS = \
+	$(SRC)/callbacks.o \
 	$(SRC)/config.o \
 	$(SRC)/const.o \
+	$(SRC)/keys.o \
 	$(SRC)/layout.o \
 	$(SRC)/lintartarus.o \
 	$(SRC)/poll.o \
 	$(SRC)/proc.o \
+	$(SRC)/state.o \
 	$(SRC)/udev.o \
 	$(SRC)/uinput.o \
-	$(SRC)/usb.o \
-	$(SRC)/usb_dump.o
+	$(SRC)/usb.o
 
 export CFLAGS = \
 	-c \
 	-g \
+	-O2 \
 	-Wall \
 	-Wextra \
 	-Wcast-qual \

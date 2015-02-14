@@ -18,12 +18,14 @@
 
 #include <glib.h>
 #include <libusb.h>
+#include <poll.h>
 #include <stdarg.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "config.h"
 #include "const.h"
+#include "poll.h"
+#include "state.h"
 #include "usb.h"
 
 #define bmREQUEST_OUT \
@@ -36,8 +38,9 @@
 		LIBUSB_REQUEST_TYPE_CLASS | \
 		LIBUSB_RECIPIENT_INTERFACE)
 
-#define TIMEOUT 2000
+#define TIMEOUT 4000
 
+static gboolean _should_have_dev;
 static libusb_device_handle *_devh;
 
 static void _build_cmds(unsigned char cmdv[CMDS_MAX][CMD_LEN])
@@ -48,89 +51,32 @@ static void _build_cmds(unsigned char cmdv[CMDS_MAX][CMD_LEN])
 		memcpy(cmdv[i], layout_cmds[i], CMD_LEN);
 	}
 
-	memcpy(cmdv[3], pulsate_cmd, CMD_LEN);
-	memcpy(cmdv[4], light_level_cmd, CMD_LEN);
+	memcpy(cmdv[3], light_level_cmd, CMD_LEN);
+	memcpy(cmdv[4], pulsate_cmd, CMD_LEN);
 
-	cmdv[0][ARG1I] = layout_vals[cfg.layout].a.a;
-	cmdv[0][ARG2I] = layout_vals[cfg.layout].a.b;
-	cmdv[1][ARG1I] = layout_vals[cfg.layout].b.a;
-	cmdv[1][ARG2I] = layout_vals[cfg.layout].b.b;
-	cmdv[2][ARG1I] = layout_vals[cfg.layout].c.a;
-	cmdv[2][ARG2I] = layout_vals[cfg.layout].c.b;
+	cmdv[0][ARG1I] = layout_vals[state.layout].a.a;
+	cmdv[0][ARG2I] = layout_vals[state.layout].a.b;
+	cmdv[1][ARG1I] = layout_vals[state.layout].b.a;
+	cmdv[1][ARG2I] = layout_vals[state.layout].b.b;
+	cmdv[2][ARG1I] = layout_vals[state.layout].c.a;
+	cmdv[2][ARG2I] = layout_vals[state.layout].c.b;
 
-	cmdv[3][ARG1I] = pulsate_vals[cfg.usb.pulse].a;
-	cmdv[3][ARG2I] = pulsate_vals[cfg.usb.pulse].b;
+	if (state.progi == -1) {
+		cmdv[3][ARG1I] = light_levels[bright_off].a;
+		cmdv[3][ARG2I] = light_levels[bright_off].b;
 
-	cmdv[4][ARG1I] = light_levels[cfg.usb.brightness].a;
-	cmdv[4][ARG2I] = light_levels[cfg.usb.brightness].b;
-}
+		cmdv[4][ARG1I] = pulsate_vals[FALSE].a;
+		cmdv[4][ARG2I] = pulsate_vals[FALSE].b;
+	} else {
+		cmdv[3][ARG1I] = light_levels[cfg.usb.brightness].a;
+		cmdv[3][ARG2I] = light_levels[cfg.usb.brightness].b;
 
-static int _hotplug(
-	libusb_context *ctx G_GNUC_UNUSED,
-	libusb_device *dev,
-	libusb_hotplug_event event,
-	void *user_data G_GNUC_UNUSED)
-{
-	int err;
-
-	libusb_close(_devh);
-	_devh = NULL;
-
-	if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED) {
-		err = libusb_open(dev, &_devh);
-		if (err != 0) {
-			usb_perror(err, "failed to open USB device");
-		} else {
-			usb_sync();
-		}
+		cmdv[4][ARG1I] = pulsate_vals[cfg.usb.pulse].a;
+		cmdv[4][ARG2I] = pulsate_vals[cfg.usb.pulse].b;
 	}
-
-	return 0;
 }
 
-void usb_init()
-{
-	int err;
-
-	err = libusb_init(NULL);
-	if (err < 0) {
-		usb_perror(err, "failed to init libusb");
-		exit(2);
-	}
-
-	if (!libusb_has_capability(LIBUSB_CAP_HAS_HOTPLUG)) {
-		g_error("libusb doesn't support hotplug events");
-	}
-
-	libusb_hotplug_register_callback(NULL,
-		LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED | LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT,
-		LIBUSB_HOTPLUG_ENUMERATE,
-		VENDOR, PRODUCT,
-		LIBUSB_HOTPLUG_MATCH_ANY,
-		_hotplug, NULL, NULL);
-}
-
-const struct libusb_pollfd** usb_get_pollfds(guint *fdsc)
-{
-	const struct libusb_pollfd **fdsi;
-	const struct libusb_pollfd **fds = libusb_get_pollfds(NULL);
-
-	*fdsc = 0;
-	fdsi = fds;
-	while (*fdsi != NULL) {
-		(*fdsc)++;
-		fdsi++;
-	}
-
-	return fds;
-}
-
-void usb_async_poll(void)
-{
-	libusb_handle_events_completed(NULL, NULL);
-}
-
-void usb_sync()
+static void _sync(void)
 {
 	int i;
 	int err;
@@ -220,6 +166,92 @@ out:
 	}
 }
 
+static void _poll_cb(int fd G_GNUC_UNUSED)
+{
+	libusb_handle_events_completed(NULL, NULL);
+}
+
+static void _fd_added(int fd, short events, void *nothing G_GNUC_UNUSED)
+{
+	poll_mod(fd, _poll_cb, events & POLLIN, events & POLLOUT);
+}
+
+static void _fd_removed(int fd, void *nothing G_GNUC_UNUSED)
+{
+	poll_rm(fd);
+}
+
+static int _hotplug(
+	libusb_context *ctx G_GNUC_UNUSED,
+	libusb_device *dev,
+	libusb_hotplug_event event,
+	void *user_data G_GNUC_UNUSED)
+{
+	int err;
+
+	libusb_close(_devh);
+	_devh = NULL;
+	_should_have_dev = FALSE;
+
+	if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED) {
+		g_debug("new usb device detected");
+
+		_should_have_dev = TRUE;
+		err = libusb_open(dev, &_devh);
+		if (err != 0) {
+			usb_perror(err, "failed to open USB device");
+		} else {
+			_sync();
+		}
+	} else {
+		g_debug("usb device removed");
+	}
+
+	return 0;
+}
+
+void usb_init()
+{
+	int err;
+	guint i;
+	const struct libusb_pollfd **fds;
+
+	err = libusb_init(NULL);
+	if (err < 0) {
+		usb_perror(err, "failed to init libusb");
+		exit(2);
+	}
+
+	i = 0;
+	fds = libusb_get_pollfds(NULL);
+	while (fds[i] != NULL) {
+		_fd_added(fds[i]->fd, fds[i]->events, NULL);
+		i++;
+	}
+
+	free(fds);
+
+	libusb_set_pollfd_notifiers(NULL, _fd_added, _fd_removed, NULL);
+	libusb_hotplug_register_callback(NULL,
+		LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED | LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT,
+		LIBUSB_HOTPLUG_ENUMERATE,
+		VENDOR, PRODUCT,
+		LIBUSB_HOTPLUG_MATCH_ANY,
+		_hotplug, NULL, NULL);
+}
+
+void usb_on_state_changed()
+{
+	_sync();
+}
+
+void usb_on_poll_tick()
+{
+	if (_should_have_dev && _devh == NULL) {
+		_devh = libusb_open_device_with_vid_pid(NULL, VENDOR, PRODUCT);
+	}
+}
+
 void usb_perror(int err, const char *format, ...)
 {
 	va_list args;
@@ -229,8 +261,6 @@ void usb_perror(int err, const char *format, ...)
 	g_string_vprintf(buff, format, args);
 	va_end(args);
 
-	g_log(NULL, G_LOG_LEVEL_CRITICAL, "%s: %s\n",
-		buff->str,
-		libusb_strerror(err));
+	g_critical("%s: %s", buff->str, libusb_strerror(err));
 	g_string_free(buff, TRUE);
 }

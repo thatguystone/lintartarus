@@ -16,9 +16,39 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#include <string.h>
+#include "state.h"
 
-/**
- * Dump USB information about the attached tartarus
- */
-void usb_dump(void);
+static gboolean _changed;
+
+void state_init()
+{
+	state_set_layout(0);
+	state_set_prog(-1, -1);
+}
+
+gboolean state_has_changed()
+{
+	gboolean changed = _changed;
+
+	_changed = FALSE;
+
+	return changed;
+}
+
+void state_set_layout(guint layout)
+{
+	if (state.layout != layout) {
+		state.layout = layout;
+		_changed = TRUE;
+	}
+}
+
+void state_set_prog(int progi, pid_t pid)
+{
+	if (progi != state.progi || pid != state.prog_pid) {
+		state.progi = progi;
+		state.prog_pid = pid;
+		_changed = TRUE;
+	}
+}

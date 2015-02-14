@@ -18,12 +18,24 @@
 
 #pragma once
 
+typedef void (*poll_cb)(int fd);
+
 /**
  * Initialize polling
  */
 void poll_init(void);
 
 /**
- * Poll for any updates
+ * Add a callback
+ */
+void poll_mod(int fd, poll_cb cb, gboolean read, gboolean write);
+
+/**
+ * Remove an FD
+ */
+void poll_rm(int fd);
+
+/**
+ * Run the main loop
  */
 void poll_run(void);

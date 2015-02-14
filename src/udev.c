@@ -18,7 +18,6 @@
 
 #include <glib.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include "const.h"
 #include "udev.h"
 
