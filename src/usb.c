@@ -46,6 +46,7 @@ static libusb_device_handle *_devh;
 static void _build_cmds(unsigned char cmdv[CMDS_MAX][CMD_LEN])
 {
 	int i;
+	int backlight;
 
 	for (i = 0; i < 3; i++) {
 		memcpy(cmdv[i], layout_cmds[i], CMD_LEN);
@@ -62,17 +63,21 @@ static void _build_cmds(unsigned char cmdv[CMDS_MAX][CMD_LEN])
 	cmdv[2][ARG2I] = layout_vals[state.layout].c.b;
 
 	if (state.progi == -1) {
-		cmdv[3][ARG1I] = light_levels[bright_off].a;
-		cmdv[3][ARG2I] = light_levels[bright_off].b;
+		cmdv[3][ARG1I] = light_levels[backlight_off].a;
+		cmdv[3][ARG2I] = light_levels[backlight_off].b;
 
 		cmdv[4][ARG1I] = pulsate_vals[FALSE].a;
 		cmdv[4][ARG2I] = pulsate_vals[FALSE].b;
 	} else {
-		cmdv[3][ARG1I] = light_levels[cfg.usb.brightness].a;
-		cmdv[3][ARG2I] = light_levels[cfg.usb.brightness].b;
+		backlight = cfg.usb.backlight == backlight_pulse;
+		cmdv[4][ARG1I] = pulsate_vals[backlight].a;
+		cmdv[4][ARG2I] = pulsate_vals[backlight].b;
 
-		cmdv[4][ARG1I] = pulsate_vals[cfg.usb.pulse].a;
-		cmdv[4][ARG2I] = pulsate_vals[cfg.usb.pulse].b;
+		backlight = cfg.usb.backlight == backlight_pulse ?
+			backlight_off :
+			cfg.usb.backlight;
+		cmdv[3][ARG1I] = light_levels[backlight].a;
+		cmdv[3][ARG2I] = light_levels[backlight].b;
 	}
 }
 

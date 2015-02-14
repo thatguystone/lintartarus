@@ -588,7 +588,10 @@ char* keys_dump(GPtrArray *combo)
 		g_string_append_c(buff, ' ');
 	}
 
-	g_string_erase(buff, 0, 1);
+	if (buff->len > 0) {
+		g_string_erase(buff, 0, 1);
+	}
+
 	g_strstrip(buff->str);
 
 	d = g_ascii_strdown(buff->str, buff->len);

@@ -25,8 +25,7 @@
  */
 #define DEFAULT_CONFIG \
 	"[default]\n" \
-	"pulse = false\n" \
-	"brightness = low\n"
+	"backlight = low\n"
 
 /**
  * A layout for the tartarus
@@ -77,8 +76,7 @@ struct config {
 	GPtrArray *programs;
 
 	struct {
-		int pulse;
-		enum usb_brightness brightness;
+		enum usb_backlight backlight;
 	} usb;
 };
 

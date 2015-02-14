@@ -22,11 +22,12 @@
 /**
  * Different backlight levels
  */
-enum usb_brightness {
-	bright_off,
-	bright_low,
-	bright_med,
-	bright_high,
+enum usb_backlight {
+	backlight_off,
+	backlight_low,
+	backlight_med,
+	backlight_high,
+	backlight_pulse,
 };
 
 /**

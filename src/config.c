@@ -297,14 +297,15 @@ static void _build_progs(GKeyFile *kf)
 	}
 }
 
-static const char* _brightness_str(int brightness)
+static const char* _backlight_str(int backlight)
 {
-	switch (brightness) {
-		case bright_off:  return "off";
-		case bright_low:  return "low";
-		case bright_med:  return "med";
-		case bright_high: return "high";
-		default:          return "unknown";
+	switch (backlight) {
+		case backlight_off:   return "off";
+		case backlight_low:   return "low";
+		case backlight_med:   return "med";
+		case backlight_high:  return "high";
+		case backlight_pulse: return "pulse";
+		default:              return "unknown";
 	}
 }
 
@@ -315,8 +316,7 @@ static void _dump(void)
 	guint k;
 
 	printf("config dir: %s\n", cfg.config_dir);
-	printf("pulse: %s\n", cfg.usb.pulse ? "true" : "false");
-	printf("brightness: %s\n", _brightness_str(cfg.usb.brightness));
+	printf("backlight: %s\n", _backlight_str(cfg.usb.backlight));
 	printf("\n");
 	printf("programs (%u):\n", cfg.programs->len);
 
@@ -366,7 +366,7 @@ static void _reload(int fd)
 	char *contents;
 	char ifdbuf[1024];
 	const char *path;
-	char *brightness;
+	char *backlight;
 	GError *error = NULL;
 	GString *buff = g_string_new("");
 	GString *config = g_string_new("");
@@ -418,29 +418,25 @@ static void _reload(int fd)
 		g_clear_error(&error);
 	}
 
-	cfg.usb.pulse = g_key_file_get_boolean(kf, "default", "pulse", &error);
-	if (error != NULL) {
-		g_critical("invalid pulse config, defaulting to false");
-		g_clear_error(&error);
-	}
-
-	brightness = g_key_file_get_string(kf, "default", "brightness", NULL);
-	if (g_strcmp0(brightness, "off") == 0) {
-		cfg.usb.brightness = bright_off;
-	} else if (g_strcmp0(brightness, "low") == 0) {
-		cfg.usb.brightness = bright_low;
-	} else if (g_strcmp0(brightness, "med") == 0) {
-		cfg.usb.brightness = bright_med;
-	} else if (g_strcmp0(brightness, "high") == 0) {
-		cfg.usb.brightness = bright_high;
+	backlight = g_key_file_get_string(kf, "default", "backlight", NULL);
+	if (g_strcmp0(backlight, "off") == 0) {
+		cfg.usb.backlight = backlight_off;
+	} else if (g_strcmp0(backlight, "low") == 0) {
+		cfg.usb.backlight = backlight_low;
+	} else if (g_strcmp0(backlight, "med") == 0) {
+		cfg.usb.backlight = backlight_med;
+	} else if (g_strcmp0(backlight, "high") == 0) {
+		cfg.usb.backlight = backlight_high;
+	} else if (g_strcmp0(backlight, "pulse") == 0) {
+		cfg.usb.backlight = backlight_pulse;
 	} else {
-		cfg.usb.brightness = bright_low;
-		g_critical("invalid brightness config, defaulting to low");
+		cfg.usb.backlight = backlight_low;
+		g_critical("invalid backlight config, defaulting to low");
 	}
 
 	_build_progs(kf);
 
-	g_free(brightness);
+	g_free(backlight);
 	g_dir_close(dir);
 	g_key_file_free(kf);
 	g_string_free(buff, TRUE);
