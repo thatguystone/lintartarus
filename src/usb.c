@@ -38,7 +38,7 @@
 		LIBUSB_REQUEST_TYPE_CLASS | \
 		LIBUSB_RECIPIENT_INTERFACE)
 
-#define TIMEOUT 4000
+#define TIMEOUT 1000
 
 static gboolean _should_have_dev;
 static libusb_device_handle *_devh;
