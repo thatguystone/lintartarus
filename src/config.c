@@ -271,13 +271,25 @@ static void _build_progs(GKeyFile *kf)
 
 	g_ptr_array_sort(cfg.programs, _program_cmp);
 	for (i = 0; i < cfg.programs->len; i++) {
+		guint next_layout;
+
 		prog = g_ptr_array_index(cfg.programs, i);
 		g_ptr_array_sort(prog->cmds, _strcmp);
 		g_ptr_array_sort(prog->exes, _strcmp);
 		g_ptr_array_sort(prog->layouts, _layout_cmp);
+
+		for (next_layout = 1, j = 0; j < prog->layouts->len; j++, next_layout++) {
+			struct layout *l = g_ptr_array_index(prog->layouts, j);
+
+			if (l->id != next_layout) {
+				g_warning("for %s, missing layout #%d; "
+					"your layouts won't function as expected",
+					prog->name,
+					next_layout);
+			}
+		}
 	}
 }
-
 
 static const char* _brightness_str(int brightness)
 {
