@@ -107,7 +107,6 @@ static void _check_active(void)
 	const char *path;
 	gboolean running = FALSE;
 	GString *buff = g_string_new("");
-	GError *error = NULL;
 
 	dir = g_dir_open("/proc", 0, NULL);
 	while ((path = g_dir_read_name(dir))) {
@@ -119,7 +118,7 @@ static void _check_active(void)
 		}
 
 		g_string_printf(buff, "/proc/%d/cmdline", pid);
-		ok = g_file_get_contents(buff->str, &contents, NULL, &error);
+		ok = g_file_get_contents(buff->str, &contents, NULL, NULL);
 		if (ok && _check_cmd(contents, pid)) {
 			running = TRUE;
 			break;
