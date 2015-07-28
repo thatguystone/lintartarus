@@ -1,6 +1,6 @@
 /*
  * lintartarus: key mapping and light control for the Razer Tartarus on Linux
- * Copyright (C) 2015 Andrew Stone <andrew@clovar.com>
+ * Copyright (C) 2015 Andrew Stone <a@stoney.io>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
